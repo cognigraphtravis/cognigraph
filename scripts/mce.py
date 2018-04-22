@@ -9,34 +9,90 @@ from scipy.signal import lfilter
 from sklearn.preprocessing import normalize
 import mne
 from mne.minimum_norm import apply_inverse_raw, make_inverse_operator
+from cognigraph.nodes.node import ProcessorNode
+from cognigraph.helpers.inverse_model import  assemble_gain_matrix
 # from mne impo
 
 
-class MCE:
+class MCE(ProcessorNode):
     input = []
     output = []
 
-    def __init__(self, fwd_opr, noise_cov, n_comp, info):
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ()
+    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path', 'snr')
+
+    def _on_input_history_invalidation(self):
+        # The methods implemented in this node do not rely on past inputs
+        pass
+
+    def _reset(self):
+        self._should_reinitialize = True
+        self.initialize()
+        output_history_is_no_longer_valid = True
+        return output_history_is_no_longer_valid
+
+
+    def __init__(self, snr=1.0, fwd_model_path=None, n_comp=40):
+        super().__init__()
+        self.snr = snr
+        self.mne_forward_model_file_path = fwd_model_path
+        self.n_comp = n_comp
+        self.info = None
+        # pass
+
+
+    def _initialize(self):
+        mne_info = self.traverse_back_and_find('mne_info')
+        # mne_info['custom_ref_applied'] = True
         # -------- truncated svd for fwd_opr operator -------- #
-        leadfield = fwd_opr['sol']['data']
-        U, S, V = svd(leadfield)
+        fwd = mne.read_forward_solution(self.mne_forward_model_file_path)
+        fwd_fix = mne.convert_forward_solution(
+                fwd, surf_ori=True, force_fixed=False)
 
-        Sn = np.zeros([n_comp, V.shape[0]])
-        Sn[:n_comp, :n_comp] = np.diag(S[:n_comp])
+        self._gain_matrix = fwd_fix['sol']['data']
 
-        self.Un = U[:, :n_comp]
+        # leadfield = fwd_opr['sol']['data']
+        U, S, V = svd(self._gain_matrix)
+
+        Sn = np.zeros([self.n_comp, V.shape[0]])
+        Sn[:self.n_comp, :self.n_comp] = np.diag(S[:self.n_comp])
+
+        self.Un = U[:, :self.n_comp]
         self.A_non_ori = Sn @ V
         # ---------------------------------------------------- #
 
-        self.mne_inv = make_inverse_operator(info, fwd_opr, noise_cov,
+        # -------- leadfield dims -------- #
+        # N_SRC = fwd_fix['nsource']
+        N_SEN = self._gain_matrix.shape[0]
+        # -------------------------------- #
+
+        # ------------------------ noise-covariance ------------------------ #
+        cov_data = np.identity(N_SEN)
+        # from nose.tools import set_trace; set_trace()
+        ch_names = np.array(mne_info['ch_names'])[mne.pick_types(mne_info,
+                                                                 eeg=True,
+                                                                 meg=False)]
+        ch_names = list(ch_names)
+        noise_cov = mne.Covariance(
+                cov_data, ch_names, mne_info['bads'],
+                mne_info['projs'], nfree=1)
+        # ------------------------------------------------------------------ #
+
+        self.mne_inv = make_inverse_operator(mne_info, fwd_fix, noise_cov,
                                              depth=0.8, loose=1, fixed=False)
-        self.info = info
+        self.mne_info = mne_info
         self.Sn = Sn
         self.V = V
 
-    def update(self):
+    def _check_value(self, key, value):
+        if key == 'snr':
+            if value <= 0:
+                raise ValueError('snr (signal-to-noise ratio) must be a positive number. See mne-python docs.')
+
+    def _update(self):
         raw_slice = mne.io.RawArray(
-                np.expand_dims(self.input, axis=1), self.info)
+                np.expand_dims(self.input, axis=1), self.mne_info)
+        raw_slice.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
 
         # --------------------- get dipole orientations --------------------- #
         stc_slice = apply_inverse_raw(raw_slice, self.mne_inv,
@@ -49,9 +105,8 @@ class MCE:
 
         # -------- setup linprog params -------- #
         A_eq = self.A_non_ori @ QQ
-        data_slice = raw_c.get_data()[:, slice_ind]
-        print('----------------------------------------')
-        print(slice_ind)
+        # data_slice = raw_c.get_data()[:, slice_ind]
+        data_slice = raw_slice.get_data()[:,0]
         b_eq = self.Un.T @ data_slice
         c = np.ones(A_eq.shape[1])
         # -------------------------------------- #
@@ -60,6 +115,7 @@ class MCE:
                       method='interior-point', bounds=(0, None),
                       options={'disp': True})
         self.output = sol.x
+        self.sol = sol
         return Q, QQ, A_eq, data_slice, b_eq, c
 
 
