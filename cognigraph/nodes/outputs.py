@@ -114,6 +114,7 @@ class ThreeDeeBrain(OutputNode):
 
     def _initialize(self):
         mne_forward_model_file_path = self.traverse_back_and_find('mne_forward_model_file_path')
+        print(mne_forward_model_file_path)
         self._brain_painter.initialize(mne_forward_model_file_path)
 
         frequency = self.traverse_back_and_find('mne_info')['sfreq']

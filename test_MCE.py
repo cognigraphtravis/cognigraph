@@ -1,10 +1,10 @@
 from nose.tools import assert_equals, raises
-from scripts.mce import MCE
+# from scripts.mce import MCE
+from cognigraph.nodes.processors import MCE
 from cognigraph.nodes.sources import BrainvisionSource
 import os.path as op
-import mne
 import numpy as np
-from mne.io import read_info, Raw
+from mne.io import Raw
 
 test_data_path = op.join(op.dirname(__file__), 'tests', 'data')
 

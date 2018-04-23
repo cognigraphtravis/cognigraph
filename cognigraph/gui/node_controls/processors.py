@@ -202,3 +202,24 @@ class BeamformerControls(ProcessorNodeControls):
 
     def _on_forgetting_factor_changed(self, param, value):
         self._processor_node.forgetting_factor_per_second = value
+
+
+class MCEControls(ProcessorNodeControls):
+    CONTROLS_LABEL = 'Inverse modelling'
+    PROCESSOR_CLASS = processors.MCE
+
+    METHODS_COMBO_NAME = 'Method: '
+
+    def _create_parameters(self):
+
+        # method_values = self.PROCESSOR_CLASS.SUPPORTED_METHODS
+        # method_value = self._processor_node.method
+        # methods_combo = parameterTypes.ListParameter(name=self.METHODS_COMBO_NAME,
+        #                                              values=method_values, value=method_value)
+        # methods_combo.sigValueChanged.connect(self._on_method_changed)
+        # self.methods_combo = self.addChild(methods_combo)
+        pass
+
+    def _on_method_changed(self, param, value):
+        # self._processor_node.method = value
+        pass
