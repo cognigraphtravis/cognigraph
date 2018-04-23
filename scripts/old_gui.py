@@ -11,7 +11,12 @@ app = QtGui.QApplication(sys.argv)
 
 pipeline = Pipeline()
 
-file_path = r"D:\Cognigraph\eyes\Koleno.eeg"
+# file_path = r"/home/dmalt/Code/python/real_eyes/Koleno.eeg"
+file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.eeg"
+# vhdr_file_path = r"/home/dmalt/Code/python/real_eyes/Koleno.vhdr"
+# vhdr_file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.vhdr"
+vhdr_file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.fif"
+fwd_path = r'/home/dmalt/mne_data/MNE-sample-data/MEG/sample/dmalt_custom-fwd.fif'
 source = sources.BrainvisionSource(file_path=file_path)
 pipeline.source = source
 # pipeline.source = sources.LSLStreamSource(stream_name='cognigraph-mock-stream')
@@ -23,11 +28,11 @@ pipeline.add_processor(preprocessing)
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
 pipeline.add_processor(linear_filter)
 
-# inverse_model = processors.InverseModel(method='MNE', snr=3.0)
-# pipeline.add_processor(inverse_model)
+inverse_model = processors.InverseModel(method='MNE', forward_model_path=fwd_path, snr=1.0)
+pipeline.add_processor(inverse_model)
 
-beamformer = processors.Beamformer()
-pipeline.add_processor(beamformer)
+# beamformer = processors.Beamformer(forward_model_path=fwd_path, output_type='activation')
+# pipeline.add_processor(beamformer)
 
 envelope_extractor = processors.EnvelopeExtractor()
 pipeline.add_processor(envelope_extractor)
@@ -72,6 +77,7 @@ window.initialize()
 
 def run():
     pipeline.update_all_nodes()
+    # print(pipeline.source._samples_already_read / 500)
 
 
 timer = QtCore.QTimer()
@@ -79,8 +85,8 @@ timer.timeout.connect(run)
 frequency = pipeline.frequency
 timer.setInterval(1000. / frequency * 10)
 
-source.loop_the_file = True
-source.MAX_SAMPLES_IN_CHUNK = 30
+source.loop_the_file = False
+source.MAX_SAMPLES_IN_CHUNK = 5
 # envelope.disabled = True
 
 
@@ -88,6 +94,7 @@ if __name__ == '__main__':
     import sys
 
     timer.start()
+    timer.stop()
 
     # TODO: this runs when in iPython. It should not.
     # Start Qt event loop unless running in interactive mode or using pyside.
