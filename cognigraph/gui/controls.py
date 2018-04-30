@@ -55,7 +55,8 @@ class ProcessorsControls(MultipleNodeControls):
         NodeControlClasses(processor_nodes.InverseModel, processors_controls.InverseModelControls),
         NodeControlClasses(processor_nodes.EnvelopeExtractor, processors_controls.EnvelopeExtractorControls),
         NodeControlClasses(processor_nodes.Preprocessing, processors_controls.PreprocessingControls),
-        NodeControlClasses(processor_nodes.Beamformer, processors_controls.BeamformerControls)
+        NodeControlClasses(processor_nodes.Beamformer, processors_controls.BeamformerControls),
+        NodeControlClasses(processor_nodes.MCE, processors_controls.MCEControls)
     ]
 
 
