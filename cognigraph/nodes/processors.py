@@ -3,13 +3,19 @@ import math
 
 import numpy as np
 import mne
+from numpy.linalg import svd
+from scipy.linalg import block_diag
+from scipy.optimize import linprog
+from sklearn.preprocessing import normalize
 from mne.preprocessing import find_outliers
+from mne.minimum_norm import apply_inverse_raw  # , make_inverse_operator
+from mne.minimum_norm import make_inverse_operator as mne_make_inverse_operator
 
 from .node import ProcessorNode, Message
 from ..helpers.matrix_functions import (make_time_dimension_second,
                                         put_time_dimension_back_from_second,
                                         apply_quad_form_to_columns,
-                                        get_a_subset_of_channels)
+                                        get_a_subset_of_channels, last_sample)
 from ..helpers.inverse_model import (get_default_forward_file,
                                      assemble_gain_matrix,
                                      make_inverse_operator,
@@ -515,3 +521,119 @@ def pynfb_filter_based_processor_class(pynfb_filter_class):
         def _update(self):
             pass
     return PynfbFilterBasedProcessorClass
+
+
+class MCE(ProcessorNode):
+    input = []
+    output = []
+
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ()
+    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path', 'snr')
+
+    def _on_input_history_invalidation(self):
+        # The methods implemented in this node do not rely on past inputs
+        pass
+
+    def _reset(self):
+        self._should_reinitialize = True
+        self.initialize()
+        output_history_is_no_longer_valid = True
+        return output_history_is_no_longer_valid
+
+
+    def __init__(self, snr=1.0, forward_model_path=None, n_comp=40):
+        super().__init__()
+        self.snr = snr
+        self.mne_forward_model_file_path = forward_model_path
+        self.n_comp = n_comp
+        self.info = None
+        # pass
+
+
+    def _initialize(self):
+        print('INITIALIZING MCE NODE ...')
+        mne_info = self.traverse_back_and_find('mne_info')
+        # mne_info['custom_ref_applied'] = True
+        # -------- truncated svd for fwd_opr operator -------- #
+        fwd = mne.read_forward_solution(self.mne_forward_model_file_path)
+        fwd_fix = mne.convert_forward_solution(
+                fwd, surf_ori=True, force_fixed=False)
+
+        self._gain_matrix = fwd_fix['sol']['data']
+
+        # leadfield = fwd_opr['sol']['data']
+        print('MCE: COMPUTING SVD OF THE FORWARD OPERATOR')
+        U, S, V = svd(self._gain_matrix)
+
+        Sn = np.zeros([self.n_comp, V.shape[0]])
+        Sn[:self.n_comp, :self.n_comp] = np.diag(S[:self.n_comp])
+
+        self.Un = U[:, :self.n_comp]
+        self.A_non_ori = Sn @ V
+        # ---------------------------------------------------- #
+
+        # -------- leadfield dims -------- #
+        # N_SRC = fwd_fix['nsource']
+        N_SEN = self._gain_matrix.shape[0]
+        # -------------------------------- #
+
+        # ------------------------ noise-covariance ------------------------ #
+        cov_data = np.identity(N_SEN)
+        # from nose.tools import set_trace; set_trace()
+        ch_names = np.array(mne_info['ch_names'])[mne.pick_types(mne_info,
+                                                                 eeg=True,
+                                                                 meg=False)]
+        ch_names = list(ch_names)
+        noise_cov = mne.Covariance(
+                cov_data, ch_names, mne_info['bads'],
+                mne_info['projs'], nfree=1)
+        # ------------------------------------------------------------------ #
+
+        self.mne_inv = mne_make_inverse_operator(
+                mne_info, fwd_fix, noise_cov, depth=0.8,
+                loose=1, fixed=False, verbose='ERROR')
+        self.mne_info = mne_info
+        self.Sn = Sn
+        self.V = V
+
+    def _check_value(self, key, value):
+        if key == 'snr':
+            if value <= 0:
+                raise ValueError('snr (signal-to-noise ratio) must be a positive number. See mne-python docs.')
+
+    def _update(self):
+        input_array = self.input_node.output
+        last_slice = last_sample(input_array)
+        n_src = self.mne_inv['nsource']
+        n_times = input_array.shape[1]
+        output_mce = np.empty([n_src, n_times])
+
+        raw_slice = mne.io.RawArray(
+                np.expand_dims(last_slice, axis=1), self.mne_info)
+        raw_slice.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
+        raw_slice.set_eeg_reference(ref_channels='average')
+
+        # --------------------- get dipole orientations --------------------- #
+        stc_slice = apply_inverse_raw(raw_slice, self.mne_inv,
+                                      pick_ori='vector',
+                                      method='MNE', lambda2=1)
+        # print(stc_slice.shape)
+        Q = normalize(stc_slice.data[:, :, 0])  # dipole orientations
+        QQ = block_diag(*Q).T                   # matrix with dipole orientats
+        # ------------------------------------------------------------------- #
+
+        # -------- setup linprog params -------- #
+        A_eq = self.A_non_ori @ QQ
+        # data_slice = raw_c.get_data()[:, slice_ind]
+        data_slice = raw_slice.get_data()[:,0]
+        b_eq = self.Un.T @ data_slice
+        c = np.ones(A_eq.shape[1])
+        # -------------------------------------- #
+
+        sol = linprog(c, A_eq=A_eq, b_eq=b_eq,
+                      method='interior-point', bounds=(0, None),
+                      options={'disp': True})
+        output_mce[:,-1] = sol.x
+        self.output = output_mce
+        self.sol = sol
+        return Q, QQ, A_eq, data_slice, b_eq, c
