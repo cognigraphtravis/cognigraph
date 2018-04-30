@@ -38,7 +38,7 @@ pipeline.add_processor(linear_filter)
 
 # inverse_model = processors.MCE(forward_model_path=fwd_path, snr=1.0)
 # inverse_model = processors.InverseModel(method='MNE', forward_model_path=fwd_path, snr=1.0)
-beamformer = processors.Beamformer(forward_model_path=fwd_path, is_adaptive=False, output_type='activation')
+beamformer = processors.Beamformer(forward_model_path=fwd_path, is_adaptive=True, output_type='activation')
 pipeline.add_processor(beamformer)
 
 
@@ -91,13 +91,13 @@ def run():
 timer = QtCore.QTimer()
 timer.timeout.connect(run)
 frequency = pipeline.frequency
-output_frequency = 3.
-timer.setInterval(1000. / frequency * 10)
-# timer.setInterval(1000. / output_frequency)
+output_frequency = 30
+# timer.setInterval(1000. / frequency * 10)
+timer.setInterval(1000. / output_frequency)
 
 source.loop_the_file = False
-# source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
-source.MAX_SAMPLES_IN_CHUNK = 5
+source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
+# source.MAX_SAMPLES_IN_CHUNK = 5
 # envelope.disabled = True
 
 

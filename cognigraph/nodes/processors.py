@@ -363,17 +363,32 @@ class Beamformer(ProcessorNode):
 
         G = self._gain_matrix
         if self.is_adaptive is False:
+            sigma2 = 1
+            # fif_file_path = '/home/dmalt/Code/python/cogni_submodules/tests/data/raw_sim.fif'
+            # raw = mne.io.Raw(fname=fif_file_path, verbose='ERROR', preload=True)  # type: mne.io.Raw
+            # raw.set_eeg_reference(ref_channels='average')
+            # raw.apply_proj()
+            # raw.pick_types(eeg=True, stim=False)
+            # data_cov = mne.compute_raw_covariance(raw, tmin=0, tmax=10, method='shrunk')
+
             Rxx = G.dot(G.T)
             self._kernel = self._calculate_kernel(Rxx)
             ch_names = np.array(mne_info['ch_names'])[mne.pick_types(mne_info,
                                                                      eeg=True,
                                                                      meg=False)]
             ch_names = list(ch_names)
-            self._Rxx  = mne.Covariance(
+            self._Rxx = mne.Covariance(
                     Rxx, ch_names, mne_info['bads'], mne_info['projs'], nfree=1)
+            # self._Rxx = data_cov
 
         elif self.is_adaptive is True:
-            self._Rxx = 0
+            # self._Rxx = 0
+            Rxx = np.zeros([G.shape[0], G.shape[0]])  # G.dot(G.T)
+            ch_names = np.array(mne_info['ch_names'])[mne.pick_types(mne_info,
+                                                                     eeg=True,
+                                                                     meg=False)]
+            self._Rxx = mne.Covariance(
+                    Rxx, ch_names, mne_info['bads'], mne_info['projs'], nfree=1)
             # Optimization
             if not self._gain_matrix.flags['F_CONTIGUOUS']:
                 self._gain_matrix = np.asfortranarray(self._gain_matrix)
@@ -444,7 +459,10 @@ class Beamformer(ProcessorNode):
                            max_ori_out='signed')
         else:
             self._update_covariance_matrix(input_array)
-            kernel = self._calculate_kernel(self._Rxx)
+            stc = lcmv_raw(raw_array, self.fwd_fix, None, self._Rxx,
+                           pick_ori='max-power', weight_norm='unit_noise_gain',
+                           max_ori_out='signed')
+            # kernel = self._calculate_kernel(self._Rxx)
 
         # output = put_time_dimension_back_from_second(
         #     kernel.dot(make_time_dimension_second(input_array))
@@ -496,11 +514,22 @@ class Beamformer(ProcessorNode):
     def _update_covariance_matrix(self, input_array):
         alpha = self._forgetting_factor_per_sample
         sample_count = input_array.shape[TIME_AXIS]
-        # Exponential smoothing of XX'
-        for sample in make_time_dimension_second(input_array).T:
-            sample_2d = sample[:, np.newaxis]
-            self._Rxx = alpha * self._Rxx + (1 - alpha) * sample_2d.dot(sample_2d.T)
+        new_Rxx_data = self._Rxx.data
 
+        # input_array = self.input_node.output
+        raw_array = mne.io.RawArray(input_array, self._mne_info)
+        raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
+        raw_array.set_eeg_reference(ref_channels='average')
+        input_array_nobads = raw_array.get_data()
+
+        # Exponential smoothing of XX'
+        for sample in make_time_dimension_second(input_array_nobads).T:
+            sample_2d = sample[:, np.newaxis]
+            # self._Rxx = alpha * self._Rxx + (1 - alpha) * sample_2d.dot(sample_2d.T)
+            new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * sample_2d.dot(sample_2d.T)
+        # self._Rxx.data = new_Rxx_data
+        ch_names = np.array(self._mne_info['ch_names'])[mne.pick_types(self._mne_info, eeg=True, meg=False, exclude='bads')]
+        self._Rxx = mne.Covariance(new_Rxx_data, ch_names, raw_array.info['bads'], raw_array.info['projs'], nfree=1)
 
 # TODO: implement this function
 def pynfb_filter_based_processor_class(pynfb_filter_class):
