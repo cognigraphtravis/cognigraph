@@ -10,7 +10,8 @@ from sklearn.preprocessing import normalize
 from mne.preprocessing import find_outliers
 from mne.minimum_norm import apply_inverse_raw  # , make_inverse_operator
 from mne.minimum_norm import make_inverse_operator as mne_make_inverse_operator
-from mne.beamformer import lcmv_raw
+# from mne.beamformer import lcmv_raw
+from mne.beamformer import make_lcmv, apply_lcmv_raw
 
 from .node import ProcessorNode, Message
 from ..helpers.matrix_functions import (make_time_dimension_second,
@@ -316,9 +317,9 @@ class Beamformer(ProcessorNode):
 
     SUPPORTED_OUTPUT_TYPES = ('power', 'activation')
 
-    def __init__(self, snr: float = 1.0, output_type: str ='power', is_adaptive: bool =False,
-                 fixed_orientation: bool = True,
-                 forward_model_path: str =None, forgetting_factor_per_second: float =0.99):
+    def __init__(self, snr: float=1.0, output_type: str='power', is_adaptive: bool=False,
+                 fixed_orientation: bool=True,
+                 forward_model_path: str=None, forgetting_factor_per_second: float=0.99):
         super().__init__()
 
         self.snr = snr  # type: float
@@ -335,7 +336,6 @@ class Beamformer(ProcessorNode):
         self._channel_indices = None  # type: list
         self._gain_matrix = None  # type: np.ndarray
         self._Rxx = None  # type: np.ndarray
-        self._kernel = None # type: np.ndarray
         self.forgetting_factor_per_second = forgetting_factor_per_second  # type: float
         self._forgetting_factor_per_sample = None  # type: float
 
@@ -363,35 +363,23 @@ class Beamformer(ProcessorNode):
 
         G = self._gain_matrix
         if self.is_adaptive is False:
-            sigma2 = 1
-            # fif_file_path = '/home/dmalt/Code/python/cogni_submodules/tests/data/raw_sim.fif'
-            # raw = mne.io.Raw(fname=fif_file_path, verbose='ERROR', preload=True)  # type: mne.io.Raw
-            # raw.set_eeg_reference(ref_channels='average')
-            # raw.apply_proj()
-            # raw.pick_types(eeg=True, stim=False)
-            # data_cov = mne.compute_raw_covariance(raw, tmin=0, tmax=10, method='shrunk')
-
             Rxx = G.dot(G.T)
-            self._kernel = self._calculate_kernel(Rxx)
-            ch_names = np.array(mne_info['ch_names'])[mne.pick_types(mne_info,
-                                                                     eeg=True,
-                                                                     meg=False)]
-            ch_names = list(ch_names)
-            self._Rxx = mne.Covariance(
-                    Rxx, ch_names, mne_info['bads'], mne_info['projs'], nfree=1)
-            # self._Rxx = data_cov
-
         elif self.is_adaptive is True:
-            # self._Rxx = 0
             Rxx = np.zeros([G.shape[0], G.shape[0]])  # G.dot(G.T)
-            ch_names = np.array(mne_info['ch_names'])[mne.pick_types(mne_info,
-                                                                     eeg=True,
-                                                                     meg=False)]
-            self._Rxx = mne.Covariance(
-                    Rxx, ch_names, mne_info['bads'], mne_info['projs'], nfree=1)
-            # Optimization
-            if not self._gain_matrix.flags['F_CONTIGUOUS']:
-                self._gain_matrix = np.asfortranarray(self._gain_matrix)
+
+        ch_names = np.array(mne_info['ch_names'])[mne.pick_types(
+            mne_info, eeg=True, meg=False)]
+        ch_names = list(ch_names)
+
+        self._Rxx = mne.Covariance(Rxx, ch_names, mne_info['bads'],
+                                   mne_info['projs'], nfree=1)
+
+        self._mne_info = mne_info
+
+
+        # Optimization
+        if not self._gain_matrix.flags['F_CONTIGUOUS']:
+            self._gain_matrix = np.asfortranarray(self._gain_matrix)
 
         frequency = mne_info['sfreq']
         self._forgetting_factor_per_sample = np.power(
@@ -408,9 +396,15 @@ class Beamformer(ProcessorNode):
         self._initialized_as_fixed = self.fixed_orientation
 
         fwd = mne.read_forward_solution(self.mne_forward_model_file_path)
-        self.fwd_fix = mne.convert_forward_solution(
+        self.fwd_surf = mne.convert_forward_solution(
                     fwd, surf_ori=True, force_fixed=False)
-        self._mne_info = mne_info
+        if not self.is_adaptive:
+            self._filters = make_lcmv(
+                    info=self._mne_info, forward=self.fwd_surf,
+                    data_cov=self._Rxx, reg=0.05, pick_ori='max-power',
+                    weight_norm='unit-noise-gain', reduce_rank=False)
+        else:
+            self._filters = None
 
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info',)
     CHANGES_IN_THESE_REQUIRE_RESET = ('snr', 'output_type', 'is_adaptive',
@@ -445,24 +439,23 @@ class Beamformer(ProcessorNode):
 
         # input_array = get_a_subset_of_channels(self.input_node.output, self._channel_indices)
         input_array = self.input_node.output
-        print(len(input_array))
-        print(len(self._mne_info['ch_names']))
         raw_array = mne.io.RawArray(input_array, self._mne_info)
 
         raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
         raw_array.set_eeg_reference(ref_channels='average')
 
-        if not self.is_adaptive:
-            kernel = self._kernel
-            stc = lcmv_raw(raw_array, self.fwd_fix, None, self._Rxx,
-                           pick_ori='max-power', weight_norm='unit_noise_gain',
-                           max_ori_out='signed')
-        else:
+        if self.is_adaptive:
             self._update_covariance_matrix(input_array)
-            stc = lcmv_raw(raw_array, self.fwd_fix, None, self._Rxx,
-                           pick_ori='max-power', weight_norm='unit_noise_gain',
-                           max_ori_out='signed')
-            # kernel = self._calculate_kernel(self._Rxx)
+            self._filters = make_lcmv(info=self._mne_info, forward=self.fwd_surf,
+                                      data_cov=self._Rxx, reg=0.5,
+                                      pick_ori='max-power',
+                                      weight_norm='unit-noise-gain',
+                                      reduce_rank=False)
+
+        # stc = lcmv_raw(raw_array, self.fwd_surf, None, self._Rxx,
+        #                pick_ori='max-power', weight_norm='unit-noise-gain',
+        #                max_ori_out='signed')
+        stc = apply_lcmv_raw(raw=raw_array, filters=self._filters, max_ori_out='abs')
 
         # output = put_time_dimension_back_from_second(
         #     kernel.dot(make_time_dimension_second(input_array))
@@ -474,7 +467,8 @@ class Beamformer(ProcessorNode):
                 output = output ** 2
         else:
             vertex_count = int(self._gain_matrix.shape[1] / 3)
-            output = np.sum(np.power(output, 2).reshape((vertex_count, 3, -1)), axis=1)
+            output = np.sum(np.power(output, 2).reshape((vertex_count, 3, -1)),
+                            axis=1)
             if self.output_type == 'activation':
                 output = np.sqrt(output)
 
