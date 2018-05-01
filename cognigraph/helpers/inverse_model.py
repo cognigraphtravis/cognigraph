@@ -111,6 +111,8 @@ def make_inverse_operator(forward_model_file_path, mne_info, sigma2=1):
                          names=mne_info['ch_names'], bads=mne_info['bads'],
                          projs=mne_info['projs'], nfree=1)
 
-    return mne.minimum_norm.make_inverse_operator(mne_info, forward,
-                                                  cov, depth=None, loose=0,
-                                                  fixed=True, verbose='ERROR')
+    # return mne.minimum_norm.make_inverse_operator(mne_info, forward,
+    #                                               cov, depth=None, loose=0,
+    #                                               fixed=True, verbose='ERROR')
+    return mne.minimum_norm.make_inverse_operator(
+                mne_info, forward, cov, depth=0.8, loose=1, fixed=False)

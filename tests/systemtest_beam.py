@@ -1,4 +1,7 @@
+"""Integration test to check mce performance"""
+
 import sys
+import os.path as op
 
 from pyqtgraph import QtCore, QtGui
 
@@ -11,37 +14,43 @@ app = QtGui.QApplication(sys.argv)
 
 pipeline = Pipeline()
 
-# file_path = r"/home/dmalt/Code/python/real_eyes/Koleno.eeg"
-file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.eeg"
-# vhdr_file_path = r"/home/dmalt/Code/python/real_eyes/Koleno.vhdr"
-# vhdr_file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.vhdr"
-# vhdr_file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.fif"
-fwd_path = r'/home/dmalt/mne_data/MNE-sample-data/MEG/sample/dmalt_custom-fwd.fif'
-source = sources.BrainvisionSource(file_path=file_path)
+cur_dir =  '/home/dmalt/Code/python/cogni_submodules'
+test_data_path = cur_dir + '/tests/data/'
+print(test_data_path)
+sim_data_fname = 'raw_sim.fif'
+# sim_data_fname = 'Koleno.fif'
+fwd_fname = 'dmalt_custom_lr-fwd.fif'
+
+surf_dir = '/home/dmalt/mne_data/MNE-sample-data/subjects/sample/surf'
+
+fwd_path = op.join(test_data_path, fwd_fname)
+sim_data_path = op.join(test_data_path, sim_data_fname)
+
+source = sources.FifSource(file_path=sim_data_path)
 pipeline.source = source
-# pipeline.source = sources.LSLStreamSource(stream_name='cognigraph-mock-stream')
 
 # Processors
-preprocessing = processors.Preprocessing(collect_for_x_seconds=120)
+preprocessing = processors.Preprocessing(collect_for_x_seconds=12)
 pipeline.add_processor(preprocessing)
 
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
 pipeline.add_processor(linear_filter)
 
-inverse_model = processors.InverseModel(method='MNE', forward_model_path=fwd_path, snr=1.0)
-pipeline.add_processor(inverse_model)
+# inverse_model = processors.MCE(forward_model_path=fwd_path, snr=1.0)
+# inverse_model = processors.InverseModel(method='MNE', forward_model_path=fwd_path, snr=1.0)
+beamformer = processors.Beamformer(forward_model_path=fwd_path, is_adaptive=True, output_type='activation')
+pipeline.add_processor(beamformer)
 
-# beamformer = processors.Beamformer(forward_model_path=fwd_path, output_type='activation')
-# pipeline.add_processor(beamformer)
 
 envelope_extractor = processors.EnvelopeExtractor()
 pipeline.add_processor(envelope_extractor)
 
 # Outputs
 global_mode = outputs.ThreeDeeBrain.LIMITS_MODES.GLOBAL
-three_dee_brain = outputs.ThreeDeeBrain(limits_mode=global_mode, buffer_length=6)
+three_dee_brain = outputs.ThreeDeeBrain(
+        limits_mode=global_mode, buffer_length=6, surfaces_dir=surf_dir)
 pipeline.add_output(three_dee_brain)
-pipeline.add_output(outputs.LSLStreamOutput())
+# pipeline.add_output(outputs.LSLStreamOutput())
 # pipeline.initialize_all_nodes()
 
 signal_viewer = outputs.SignalViewer()
@@ -51,7 +60,6 @@ window = GUIWindow(pipeline=pipeline)
 window.init_ui()
 window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
 window.show()
-
 
 
 base_controls = window._controls._base_controls
@@ -83,10 +91,13 @@ def run():
 timer = QtCore.QTimer()
 timer.timeout.connect(run)
 frequency = pipeline.frequency
-timer.setInterval(1000. / frequency * 10)
+output_frequency = 30
+# timer.setInterval(1000. / frequency * 10)
+timer.setInterval(1000. / output_frequency)
 
 source.loop_the_file = False
-source.MAX_SAMPLES_IN_CHUNK = 5
+source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
+# source.MAX_SAMPLES_IN_CHUNK = 5
 # envelope.disabled = True
 
 
@@ -94,7 +105,7 @@ if __name__ == '__main__':
     import sys
 
     timer.start()
-    timer.stop()
+    # timer.stop()
 
     # TODO: this runs when in iPython. It should not.
     # Start Qt event loop unless running in interactive mode or using pyside.
