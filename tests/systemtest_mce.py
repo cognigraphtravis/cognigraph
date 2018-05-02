@@ -19,7 +19,8 @@ test_data_path = cur_dir + '/tests/data/'
 print(test_data_path)
 sim_data_fname = 'raw_sim.fif'
 # sim_data_fname = 'Koleno.fif'
-fwd_fname = 'dmalt_custom_lr-fwd.fif'
+# fwd_fname = 'dmalt_custom_lr-fwd.fif'
+fwd_fname = 'dmalt_custom_mr-fwd.fif'
 
 surf_dir = '/home/dmalt/mne_data/MNE-sample-data/subjects/sample/surf'
 
@@ -30,7 +31,7 @@ source = sources.FifSource(file_path=sim_data_path)
 pipeline.source = source
 
 # Processors
-preprocessing = processors.Preprocessing(collect_for_x_seconds=12)
+preprocessing = processors.Preprocessing(collect_for_x_seconds=30)
 pipeline.add_processor(preprocessing)
 
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
@@ -47,7 +48,7 @@ envelope_extractor = processors.EnvelopeExtractor()
 # Outputs
 global_mode = outputs.ThreeDeeBrain.LIMITS_MODES.GLOBAL
 three_dee_brain = outputs.ThreeDeeBrain(
-        limits_mode=global_mode, buffer_length=6, surfaces_dir=surf_dir)
+        limits_mode=global_mode, buffer_length=10, surfaces_dir=surf_dir)
 pipeline.add_output(three_dee_brain)
 # pipeline.add_output(outputs.LSLStreamOutput())
 # pipeline.initialize_all_nodes()
@@ -76,7 +77,7 @@ envelope_controls = processors_controls.children()[2]
 
 
 three_dee_brain_controls = outputs_controls.children()[0]
-three_dee_brain_controls.limits_mode_combo.setValue('Global')
+three_dee_brain_controls.threshold_slider.setValue(50)
 three_dee_brain_controls.limits_mode_combo.setValue('Local')
 
 window.initialize()
@@ -90,12 +91,12 @@ def run():
 timer = QtCore.QTimer()
 timer.timeout.connect(run)
 frequency = pipeline.frequency
-output_frequency = 3.
+output_frequency = 10
 # timer.setInterval(1000. / frequency * 500)
 timer.setInterval(1000. / output_frequency)
 
 source.loop_the_file = False
-source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
+source.MAX_SAMPLES_IN_CHUNK = 10000
 # envelope.disabled = True
 
 
