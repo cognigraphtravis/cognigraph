@@ -30,25 +30,25 @@ source = sources.FifSource(file_path=sim_data_path)
 pipeline.source = source
 
 # Processors
-preprocessing = processors.Preprocessing(collect_for_x_seconds=12)
+preprocessing = processors.Preprocessing(collect_for_x_seconds=30)
 pipeline.add_processor(preprocessing)
 
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
 pipeline.add_processor(linear_filter)
 
-# inverse_model = processors.MCE(forward_model_path=fwd_path, snr=1.0)
-# inverse_model = processors.InverseModel(method='MNE', forward_model_path=fwd_path, snr=1.0)
-beamformer = processors.Beamformer(forward_model_path=fwd_path, is_adaptive=True, output_type='activation')
+beamformer = processors.Beamformer(forward_model_path=fwd_path,
+                                   is_adaptive=True, output_type='activation',
+                                   forgetting_factor_per_second=0.99)
 pipeline.add_processor(beamformer)
 
 
-envelope_extractor = processors.EnvelopeExtractor()
+envelope_extractor = processors.EnvelopeExtractor(0.995)
 pipeline.add_processor(envelope_extractor)
 
 # Outputs
 global_mode = outputs.ThreeDeeBrain.LIMITS_MODES.GLOBAL
 three_dee_brain = outputs.ThreeDeeBrain(
-        limits_mode=global_mode, buffer_length=6, surfaces_dir=surf_dir)
+        limits_mode=global_mode, buffer_length=10, surfaces_dir=surf_dir)
 pipeline.add_output(three_dee_brain)
 # pipeline.add_output(outputs.LSLStreamOutput())
 # pipeline.initialize_all_nodes()
@@ -67,7 +67,8 @@ source_controls = base_controls.source_controls
 processors_controls = base_controls.processors_controls
 outputs_controls = base_controls.outputs_controls
 
-source_controls.source_type_combo.setValue(source_controls.SOURCE_TYPE_PLACEHOLDER)
+source_controls.source_type_combo.setValue(
+        source_controls.SOURCE_TYPE_PLACEHOLDER)
 
 
 linear_filter_controls = processors_controls.children()[0]
@@ -78,25 +79,28 @@ envelope_controls = processors_controls.children()[2]
 
 three_dee_brain_controls = outputs_controls.children()[0]
 three_dee_brain_controls.limits_mode_combo.setValue('Global')
-three_dee_brain_controls.limits_mode_combo.setValue('Local')
+three_dee_brain_controls.threshold_slider.setValue(70)
+# three_dee_brain_controls.limits_mode_combo.setValue('Local')
 
 window.initialize()
 
 
 def run():
     pipeline.update_all_nodes()
+    # pass
     # print(pipeline.source._samples_already_read / 500)
 
 
 timer = QtCore.QTimer()
 timer.timeout.connect(run)
 frequency = pipeline.frequency
-output_frequency = 30
+output_frequency = 10
 # timer.setInterval(1000. / frequency * 10)
 timer.setInterval(1000. / output_frequency)
 
 source.loop_the_file = False
-source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
+# source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
+source.MAX_SAMPLES_IN_CHUNK = 10000
 # source.MAX_SAMPLES_IN_CHUNK = 5
 # envelope.disabled = True
 
@@ -105,6 +109,9 @@ if __name__ == '__main__':
     import sys
 
     timer.start()
+    # while True:
+    #     pipeline.update_all_nodes()
+    # timer.start()
     # timer.stop()
 
     # TODO: this runs when in iPython. It should not.
