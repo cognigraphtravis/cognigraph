@@ -50,7 +50,7 @@ raw = raw.crop(0., 30.)  # 30 sec is enough
 ##############################################################################
 # Generate dipole time series
 n_dipoles = 2  # number of dipoles to create
-epoch_duration = 2.  # duration of each epoch/event
+epoch_duration = 20.  # duration of each epoch/event
 n = 0  # harmonic number
 
 
@@ -63,7 +63,7 @@ def data_fun(times):
                    for ii in (2 * n, 2 * n + 1)]
     window[start:stop] = 1.
     n += 1
-    data = 2e-7 * np.sin(2. * np.pi * 10. * times)
+    data = 1e-7 * np.sin(2. * np.pi * 10. * times)
     data *= window
     return data
 
@@ -78,10 +78,11 @@ stc_sim = simulate_sparse_stc(
 from load_data import subjects_dir, subject
 brain = stc_sim.plot(
         subject=subject, surface='inflated', hemi='both',
-        subjects_dir=subjects_dir, initial_time=0.222)
+        subjects_dir=subjects_dir, initial_time=7.222)
 
-# vertno_max, time_max = stc_sim.get_peak(hemi='lh')
-brain.add_foci(stc_sim.lh_verto[0], coords_as_verts=True, hemi='lh', color='blue', scale_factor=0.6)
+# vertno_max, time_max = stc_sim.get_peak(hemi='rh')
+brain.add_foci(stc_sim.lh_vertno[0], coords_as_verts=True, hemi='lh', color='blue', scale_factor=0.6)
+brain.add_foci(stc_sim.rh_vertno[0], coords_as_verts=True, hemi='rh', color='blue', scale_factor=0.6)
 # brain.show_view('lateral')
 
 # look at our source data
@@ -95,9 +96,9 @@ fig.show()
 raw_sim = simulate_raw(raw, stc_sim, trans_fname, src, bem_fname, cov='simple',
                        iir_filter=[0.2, -0.2, 0.04], ecg=False, blink=False,
                        n_jobs=1, verbose=True)
-raw_sim.plot()
+# raw_sim.plot()
 
-# raw_sim.save('/home/dmalt/Data/cognigraph/data/raw_sim.fif', overwrite=True)
+# raw_sim.save('/home/dmalt/Code/python/cogni_submodules/tests/data/raw_sim.fif', overwrite=True)
 ##############################################################################
 # Plot evoked data
 
