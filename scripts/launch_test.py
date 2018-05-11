@@ -1,4 +1,4 @@
-import sys
+﻿import sys
 
 from pyqtgraph import QtCore, QtGui
 import mne
@@ -16,6 +16,7 @@ app = QtGui.QApplication(sys.argv)
 
 pipeline = Pipeline()
 
+launch_test_filepath = QtGui.QFileDialog.getOpenFileName(caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")
 source = sources.BrainvisionSource(file_path=launch_test_filepath)
 source.loop_the_file = True
 source.MAX_SAMPLES_IN_CHUNK = 30
@@ -78,16 +79,14 @@ with source.not_triggering_reset():
     source.data, _ = read_brain_vision_data(vhdr_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 
 
-# Создаем таймер, который все это будет гонять
+# Подключаем таймер окна к обновлению пайплайна
 
 def run():
     pipeline.update_all_nodes()
 
-
-timer = QtCore.QTimer()
-timer.timeout.connect(run)
+window.timer.timeout.connect(run)
 frequency = pipeline.frequency
-timer.setInterval(1000. / frequency * 10)
+window.timer.setInterval(1000. / frequency * 10)
 
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
