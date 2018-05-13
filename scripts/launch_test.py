@@ -16,6 +16,8 @@ app = QtGui.QApplication(sys.argv)
 
 pipeline = Pipeline()
 
+# launch_test_filepath = r'/home/dmalt/Data/cognigraph/data/Koleno.eeg'
+launch_test_filepath = r'/home/dmalt/Data/cognigraph/data/Koleno.eeg'
 source = sources.BrainvisionSource(file_path=launch_test_filepath)
 source.loop_the_file = True
 source.MAX_SAMPLES_IN_CHUNK = 30
