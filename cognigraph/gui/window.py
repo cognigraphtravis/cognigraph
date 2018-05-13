@@ -33,7 +33,7 @@ class GUIWindow(QtGui.QMainWindow):
         
         # Add control portion to the main layout
         main_layout = QtGui.QHBoxLayout()
-        self._controls_widget.setMinimumWidth(400)
+        self._controls_widget.setMinimumWidth(820)
         main_layout.addLayout(controls_layout)
 
         self.centralWidget().setLayout(main_layout)
@@ -42,7 +42,7 @@ class GUIWindow(QtGui.QMainWindow):
     def initialize(self):
         self._pipeline.initialize_all_nodes()
         for node_widget in self._node_widgets:
-            node_widget.setMinimumWidth(400)
+            node_widget.setMinimumWidth(600)
             
             # insert widget at before-the-end pos (just before controls widget)
             self.main_layout.insertWidget(self.main_layout.count()-1, node_widget)
