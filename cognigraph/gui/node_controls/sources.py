@@ -1,4 +1,5 @@
 from pyqtgraph.parametertree import parameterTypes
+from pyqtgraph import QtCore, QtGui
 import pylsl
 
 from ...helpers.pyqtgraph import MyGroupParameter
@@ -71,9 +72,24 @@ class BrainvisionSourceControls(SourceControls):
             file_path = pipeline.source.file_path
         except:
             file_path = ''
+        
+        # Add LineEdit for choosing file
         file_path_str = parameterTypes.SimpleParameter(type='str', name=self.FILE_PATH_STR_NAME, value=file_path)
         file_path_str.sigValueChanged.connect(self._on_file_path_changed)
+        
         self.file_path_str = self.addChild(file_path_str)
-
+        
+        # Add PushButton for choosing file
+        file_path_button = parameterTypes.ActionParameter(type='action', name="Select data...")
+        file_path_button.sigActivated.connect(self._choose_file)
+        
+        self.file_path_button = self.addChild(file_path_button)
+        
+    def _choose_file(self):
+        file_path = QtGui.QFileDialog.getOpenFileName(caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")
+        
+        if file_path != "":
+            self.file_path_str.setValue(file_path)
+    
     def _on_file_path_changed(self, param, value):
         self._pipeline.source.file_path = value
