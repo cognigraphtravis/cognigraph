@@ -17,27 +17,23 @@ class GUIWindow(QtGui.QMainWindow):
         self.timer = QtCore.QTimer()
         self._control_button = QtGui.QPushButton("Start")
         self._control_button.clicked.connect(self._toggle_timer)
-        
-        self.main_layout = None  # type: QtGui.QBoxLayout
-        
+                
     def init_ui(self):
         self._controls.initialize()
 
-        central_widget = QtGui.QWidget()
+        central_widget = QtGui.QSplitter()
         self.setCentralWidget(central_widget)
         
         # Build the controls portion of the window
         controls_layout = QtGui.QVBoxLayout()
         controls_layout.addWidget(self._controls_widget)
-        controls_layout.addWidget(self._control_button)        
-        
-        # Add control portion to the main layout
-        main_layout = QtGui.QHBoxLayout()
+        controls_layout.addWidget(self._control_button)
         self._controls_widget.setMinimumWidth(400)
-        main_layout.addLayout(controls_layout)
-
-        self.centralWidget().setLayout(main_layout)
-        self.main_layout = main_layout
+        
+        # Add control portion to the main widget      
+        controls_layout_wrapper = QtGui.QWidget()
+        controls_layout_wrapper.setLayout(controls_layout)
+        self.centralWidget().addWidget(controls_layout_wrapper)      
 
     def initialize(self):
         self._pipeline.initialize_all_nodes()
@@ -45,7 +41,7 @@ class GUIWindow(QtGui.QMainWindow):
             node_widget.setMinimumWidth(400)
             
             # insert widget at before-the-end pos (just before controls widget)
-            self.main_layout.insertWidget(self.main_layout.count()-1, node_widget)
+            self.centralWidget().insertWidget(self.centralWidget().count()-1, node_widget)
 
     def _toggle_timer(self):
         if self.timer.isActive():
