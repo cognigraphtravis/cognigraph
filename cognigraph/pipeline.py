@@ -1,3 +1,4 @@
+import time
 from typing import List
 
 from . import TIME_AXIS
@@ -5,6 +6,7 @@ from .nodes.node import Node, SourceNode, ProcessorNode, OutputNode
 from .helpers.decorators import accepts
 from .helpers.misc import class_name_of
 
+import logging
 
 class Pipeline(object):
     """
@@ -29,6 +31,7 @@ class Pipeline(object):
         self._processors = list()  # type: List[ProcessorNode]
         self._outputs = list()  # type: List[OutputNode]
         self._inputs_of_outputs = list()  # type: List[(SourceNode, ProcessorNode)]
+        self.logger = logging.getLogger(type(self).__name__)
 
     @property
     def source(self):
@@ -84,14 +87,24 @@ class Pipeline(object):
             return self.source
 
     def initialize_all_nodes(self):
+        self.logger.info('Initialize')
+        t1 = time.time()
+        t1 = time.time()
         for node in self.all_nodes:
             node.initialize()
+        t2 = time.time()
+        self.logger.info(
+                'Finish initialization in {:.1f} ms'.format((t2 - t1) * 1000))
 
     def update_all_nodes(self):
+        self.logger.info('Start update ' + '>' * 6)
+        t1 = time.time()
         for node in self.all_nodes:
             node.update()
             if node is self.source and node.output is not None and node.output.size > 0:
                 pass  # print(node.output.shape[TIME_AXIS])
+        t2 = time.time()
+        self.logger.info('Finish in {:.1f} ms'.format((t2 - t1) * 1000))
 
     def run(self):
         while self.source.is_alive:  # TODO: also stop if all outputs are dead
