@@ -446,7 +446,7 @@ class Beamformer(ProcessorNode):
 
         if self.is_adaptive:
             self._update_covariance_matrix(input_array)
-            self._filters = make_lcmv(info=self._mne_info, forward=self.fwd_surf,
+            self._filters = make_lcmv(info=raw_array.info, forward=self.fwd_surf,
                                       data_cov=self._Rxx, reg=0.5,
                                       pick_ori='max-power',
                                       weight_norm='unit-noise-gain',
