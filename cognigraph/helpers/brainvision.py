@@ -1,3 +1,5 @@
+"""Functions to read input from file"""
+import os
 import mne
 import mne.io.brainvision.brainvision as brainvision
 
@@ -32,12 +34,16 @@ if not hasattr(brainvision, '_check_version_monkey_patched'):  # Do not repeat u
     brainvision._check_version_monkey_patched = True
 
 
-def read_brain_vision_data(vhdr_file_path, time_axis, start_s: int=0, stop_s: int=None):
-    raw = mne.io.read_raw_brainvision(vhdr_fname=vhdr_file_path, verbose='ERROR')  # type: mne.io.Raw
+def read_brain_vision_data(file_path, time_axis, start_s: int=0, stop_s: int=None):
+    vhdr_file_path = os.path.splitext(file_path)[0] + '.vhdr'
+    raw = mne.io.read_raw_brainvision(vhdr_fname=vhdr_file_path,
+                                      verbose='ERROR')  # type: mne.io.Raw
 
-    # Get the required time slice. mne.io.Raw.get_data takes array indices, not time
+    # Get the required time slice.
+    # mne.io.Raw.get_data takes array indices, not time
     start = 0 if start_s is None else raw.time_as_index(start_s)[0]
-    stop = min(raw.n_times if stop_s is None else raw.time_as_index(stop_s)[0], raw.n_times)
+    stop = min(raw.n_times if stop_s is None else raw.time_as_index(stop_s)[0],
+               raw.n_times)
     data = raw.get_data(start=start, stop=stop)
 
     mne_info = raw.info.copy()
@@ -47,10 +53,36 @@ def read_brain_vision_data(vhdr_file_path, time_axis, start_s: int=0, stop_s: in
 
     return data, mne_info
 
-def read_fif_data(fif_file_path, time_axis, start_s: int=0, stop_s: int=None):
-    raw = mne.io.Raw(fname=fif_file_path, verbose='ERROR')  # type: mne.io.Raw
 
-    # Get the required time slice. mne.io.Raw.get_data takes array indices, not time
+def read_fif_data(file_path, time_axis, start_s: int=0, stop_s: int=None):
+    raw = mne.io.Raw(fname=file_path, verbose='ERROR')  # type: mne.io.Raw
+
+    # Get the required time slice.
+    # mne.io.Raw.get_data takes array indices, not time
+    start = 0 if start_s is None else raw.time_as_index(start_s)[0]
+    stop = min(raw.n_times if stop_s is None else raw.time_as_index(stop_s)[0],
+               raw.n_times)
+    data = raw.get_data(start=start, stop=stop)
+
+    mne_info = raw.info.copy()
+
+    if time_axis != BRAINVISION_TIME_AXIS:
+        data = data.T
+
+    return data, mne_info
+
+
+def read_edf_data(file_path, time_axis, start_s: int=0, stop_s: int=None):
+    raw = mne.io.edf.read_raw_edf(input_fname=file_path, preload=True,
+                                  verbose='ERROR', stim_channel=-1,
+                                  misc=[129,130,131])  # type: mne.io.Raw
+    try:
+        del raw._cals  # fixes bug with pick_types in edf data
+    except:
+        pass
+    raw.pick_types(meg=False, eeg=True)
+    # Get the required time slice.
+    # mne.io.Raw.get_data takes array indices, not time
     start = 0 if start_s is None else raw.time_as_index(start_s)[0]
     stop = min(raw.n_times if stop_s is None else raw.time_as_index(stop_s)[0], raw.n_times)
     data = raw.get_data(start=start, stop=stop)
