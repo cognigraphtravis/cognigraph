@@ -92,6 +92,6 @@ envelope_extractor.update()
 assert(envelope_extractor.output is not None)
 
 
-from cognigraph.nodes.sources import BrainvisionSource
-source = BrainvisionSource(r"C:\Users\evgenii\Downloads\brainvision\Bulavenkova_A_2017-10-24_15-33-18_Rest.vmrk")
+from cognigraph.nodes.sources import FileSource
+source = FileSource(r"C:\Users\evgenii\Downloads\brainvision\Bulavenkova_A_2017-10-24_15-33-18_Rest.vmrk")
 source.update()

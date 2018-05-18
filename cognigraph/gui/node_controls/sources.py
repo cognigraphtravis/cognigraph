@@ -3,7 +3,7 @@ from pyqtgraph import QtCore, QtGui
 import pylsl
 
 from ...helpers.pyqtgraph import MyGroupParameter
-from ...nodes.sources import LSLStreamSource, BrainvisionSource
+from ...nodes.sources import LSLStreamSource, FileSource
 
 
 class SourceControls(MyGroupParameter):
@@ -58,38 +58,63 @@ class LSLStreamSourceControls(SourceControls):
             pass
 
 
-class BrainvisionSourceControls(SourceControls):
-    SOURCE_CLASS = BrainvisionSource
+class FileSourceControls(SourceControls):
+    SOURCE_CLASS = FileSource
 
-    FILE_PATH_STR_NAME = 'Path to Brainvision file: '
+    FILE_PATH_STR_NAME = 'Path to file: '
 
     def __init__(self, pipeline, **kwargs):
 
-        kwargs['title'] = 'Brainvision file'
+        kwargs['title'] = 'Input file'
         super().__init__(pipeline, **kwargs)
 
         try:
             file_path = pipeline.source.file_path
         except:
             file_path = ''
-        
+
         # Add LineEdit for choosing file
-        file_path_str = parameterTypes.SimpleParameter(type='str', name=self.FILE_PATH_STR_NAME, value=file_path)
+        file_path_str = parameterTypes.SimpleParameter(
+                type='str', name=self.FILE_PATH_STR_NAME, value=file_path)
+
         file_path_str.sigValueChanged.connect(self._on_file_path_changed)
-        
+
         self.file_path_str = self.addChild(file_path_str)
-        
+
         # Add PushButton for choosing file
-        file_path_button = parameterTypes.ActionParameter(type='action', name="Select data...")
+        file_path_button = parameterTypes.ActionParameter(
+                type='action', name="Select data...")
+
         file_path_button.sigActivated.connect(self._choose_file)
-        
+
         self.file_path_button = self.addChild(file_path_button)
-        
+
     def _choose_file(self):
-        file_path = QtGui.QFileDialog.getOpenFileName(caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")
-        
+        filter_string = ''
+        supported_exts = self._pipeline.source.SUPPORTED_EXTENSIONS
+        for i, key in enumerate(supported_exts.keys()):
+            if i > 0:
+                filter_string += ';;'
+            exts = supported_exts[key]
+            ext_wildcards = ['*' + ext for ext in exts]
+            ext_wildcards_str = ''
+            for i, ext_wildcard in enumerate(ext_wildcards):
+                if i == 0:
+                    ext_wildcards_str += '('
+                else:
+                    ext_wildcards_str += ' '
+                ext_wildcards_str += ext_wildcard
+            ext_wildcards_str += ')'
+
+            filter_string += '{} {}'.format(key, ext_wildcards_str)
+
+        file_path = QtGui.QFileDialog.getOpenFileName(
+                caption="Select Data",
+                # filter="Brainvision (*.eeg *.vhdr *.vmrk)")
+                filter=filter_string)
+
         if file_path != "":
             self.file_path_str.setValue(file_path)
-    
+
     def _on_file_path_changed(self, param, value):
         self._pipeline.source.file_path = value

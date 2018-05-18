@@ -1,7 +1,7 @@
 from nose.tools import assert_equals, raises
 # from scripts.mce import MCE
 from cognigraph.nodes.processors import MCE
-from cognigraph.nodes.sources import BrainvisionSource
+from cognigraph.nodes.sources import FileSource
 import os.path as op
 import numpy as np
 from mne.io import Raw
@@ -42,7 +42,7 @@ class TestMCE:
         assert_equals(self.mce_def.n_comp, 40)
         assert(self.mce_def.info is None)
 
-        input_node = BrainvisionSource()
+        input_node = FileSource()
         input_node.mne_info = self.info
         self.mce.input_node = input_node
         self.mce_def.input_node = input_node

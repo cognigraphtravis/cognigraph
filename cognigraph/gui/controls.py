@@ -92,8 +92,8 @@ class SourceControls(MyGroupParameter):
     SOURCE_OPTIONS = OrderedDict((
         ('LSL stream', NodeControlClasses(source_nodes.LSLStreamSource,
                                           source_controls.LSLStreamSourceControls)),
-        ('Brainvision data', NodeControlClasses(source_nodes.BrainvisionSource,
-                                                source_controls.BrainvisionSourceControls)),
+        ('File data', NodeControlClasses(source_nodes.FileSource,
+                                                source_controls.FileSourceControls)),
     ))
 
     SOURCE_TYPE_COMBO_NAME = 'Source type: '

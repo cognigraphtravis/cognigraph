@@ -9,7 +9,7 @@ from cognigraph.gui.window import GUIWindow
 pipeline = Pipeline()
 
 file_path = r"C:\Users\evgenii\Downloads\brainvision\Bulavenkova_A_2017-10-24_15-33-18_Rest.vmrk"
-pipeline.source = sources.BrainvisionSource(file_path=file_path)
+pipeline.source = sources.FileSource(file_path=file_path)
 
 # linear_filter = processors.LinearFilter(lower_cutoff=0.1, upper_cutoff=40)
 # pipeline.add_processor(linear_filter)
