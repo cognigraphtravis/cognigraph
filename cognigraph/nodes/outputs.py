@@ -219,8 +219,11 @@ class BrainPainter(object):
         self.mesh_item.meshDataChanged()
 
     def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:
-        surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
-                      for h in ('lh', 'rh')]
+        if self.surfaces_dir:
+            surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
+                          for h in ('lh', 'rh')]
+        else:
+            raise NameError('surfaces_dir is not set')
         lh_mesh, rh_mesh = [nib.freesurfer.read_geometry(surf_path) for surf_path in surf_paths]
         lh_vertexes, lh_faces = lh_mesh
         rh_vertexes, rh_faces = rh_mesh
