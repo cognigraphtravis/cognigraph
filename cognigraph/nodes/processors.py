@@ -1,3 +1,5 @@
+import time
+
 from typing import Tuple, List
 import math
 
@@ -11,7 +13,9 @@ from mne.preprocessing import find_outliers
 from mne.minimum_norm import apply_inverse_raw  # , make_inverse_operator
 from mne.minimum_norm import make_inverse_operator as mne_make_inverse_operator
 # from mne.beamformer import lcmv_raw
-from mne.beamformer import make_lcmv, apply_lcmv_raw
+# from mne.beamformer import make_lcmv, apply_lcmv_raw
+from mne.beamformer import  apply_lcmv_raw
+from ..helpers.make_lcmv import make_lcmv
 
 from .node import ProcessorNode, Message
 from ..helpers.matrix_functions import (make_time_dimension_second,
@@ -30,10 +34,12 @@ from ..helpers.channels import (calculate_interpolation_matrix,
 from .. import TIME_AXIS
 from vendor.nfb.pynfb.signal_processing import filters
 
+import logging
+
 
 class Preprocessing(ProcessorNode):
 
-    def __init__(self, collect_for_x_seconds: int =60):
+    def __init__(self, collect_for_x_seconds: int=60):
         super().__init__()
         self.collect_for_x_seconds = collect_for_x_seconds  # type: int
 
@@ -376,7 +382,6 @@ class Beamformer(ProcessorNode):
 
         self._mne_info = mne_info
 
-
         # Optimization
         if not self._gain_matrix.flags['F_CONTIGUOUS']:
             self._gain_matrix = np.asfortranarray(self._gain_matrix)
@@ -446,11 +451,16 @@ class Beamformer(ProcessorNode):
 
         if self.is_adaptive:
             self._update_covariance_matrix(input_array)
+            t1 = time.time()
             self._filters = make_lcmv(info=self._mne_info, forward=self.fwd_surf,
                                       data_cov=self._Rxx, reg=0.5,
                                       pick_ori='max-power',
                                       weight_norm='unit-noise-gain',
                                       reduce_rank=False)
+            t2 = time.time()
+            self.logger.debug(
+                    'Assembled lcmv instance in {:.1f} ms'.format(
+                        (t2 - t1) * 1000))
 
         # stc = lcmv_raw(raw_array, self.fwd_surf, None, self._Rxx,
         #                pick_ori='max-power', weight_norm='unit-noise-gain',
@@ -506,8 +516,10 @@ class Beamformer(ProcessorNode):
                 raise ValueError('Beamformer can either be adaptive or not. This should be a boolean')
 
     def _update_covariance_matrix(self, input_array):
+        t1 = time.time()
         alpha = self._forgetting_factor_per_sample
         sample_count = input_array.shape[TIME_AXIS]
+        self.logger.debug('Number of samples: {}'.format(sample_count))
         new_Rxx_data = self._Rxx.data
 
         # input_array = self.input_node.output
@@ -517,13 +529,21 @@ class Beamformer(ProcessorNode):
         input_array_nobads = raw_array.get_data()
 
         # Exponential smoothing of XX'
-        for sample in make_time_dimension_second(input_array_nobads).T:
-            sample_2d = sample[:, np.newaxis]
+        # for sample in make_time_dimension_second(input_array_nobads).T:
+        #     sample_2d = sample[:, np.newaxis]
+        t2 = time.time()
+        self.logger.debug('Prepared covariance update in {:.2f} ms'.format((t2 - t1) * 1000))
+        samples = make_time_dimension_second(input_array_nobads).T
             # self._Rxx = alpha * self._Rxx + (1 - alpha) * sample_2d.dot(sample_2d.T)
-            new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * sample_2d.dot(sample_2d.T)
+            # new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * sample_2d.dot(sample_2d.T)
+        new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * samples.T.dot(samples)
+        t3 = time.time()
+        self.logger.debug('Updated matrix data in {:.2f} ms'.format((t3 - t2) * 1000))
         # self._Rxx.data = new_Rxx_data
         ch_names = np.array(self._mne_info['ch_names'])[mne.pick_types(self._mne_info, eeg=True, meg=False, exclude='bads')]
         self._Rxx = mne.Covariance(new_Rxx_data, ch_names, raw_array.info['bads'], raw_array.info['projs'], nfree=1)
+        t4 = time.time()
+        self.logger.debug('Created instance of covariance in {:.2f} ms'.format((t4 - t4) * 1000))
 
 # TODO: implement this function
 def pynfb_filter_based_processor_class(pynfb_filter_class):
