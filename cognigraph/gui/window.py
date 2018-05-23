@@ -17,14 +17,14 @@ class GUIWindow(QtGui.QMainWindow):
         self.timer = QtCore.QTimer()
         self._control_button = QtGui.QPushButton("Start")
         self._control_button.clicked.connect(self._toggle_timer)
-        
-        #Способ 1. Поставить ширину виджета равную 0.9 ширины окна делить на кол-во виджетов
-        #Я использую QSplitter, значит минимальная ширина значит только что меньше нее виджет скрывается
-        #По умолчанию скорее всего виджет будет больше, в соответствии с шириной окна
+
+        #РЎРїРѕСЃРѕР± 1. РџРѕСЃС‚Р°РІРёС‚СЊ С€РёСЂРёРЅСѓ РІРёРґР¶РµС‚Р° СЂР°РІРЅСѓСЋ 0.9 С€РёСЂРёРЅС‹ РѕРєРЅР° РґРµР»РёС‚СЊ РЅР° РєРѕР»-РІРѕ РІРёРґР¶РµС‚РѕРІ
+        #РЇ РёСЃРїРѕР»СЊР·СѓСЋ QSplitter, Р·РЅР°С‡РёС‚ РјРёРЅРёРјР°Р»СЊРЅР°СЏ С€РёСЂРёРЅР° Р·РЅР°С‡РёС‚ С‚РѕР»СЊРєРѕ С‡С‚Рѕ РјРµРЅСЊС€Рµ РЅРµРµ РІРёРґР¶РµС‚ СЃРєСЂС‹РІР°РµС‚СЃСЏ
+        #РџРѕ СѓРјРѕР»С‡Р°РЅРёСЋ СЃРєРѕСЂРµРµ РІСЃРµРіРѕ РІРёРґР¶РµС‚ Р±СѓРґРµС‚ Р±РѕР»СЊС€Рµ, РІ СЃРѕРѕС‚РІРµС‚СЃС‚РІРёРё СЃ С€РёСЂРёРЅРѕР№ РѕРєРЅР°
         #self._widget_width = QtGui.QDesktopWidget().availableGeometry().width() * 0.9 / (len(pipeline._outputs) + 1);
         
-        #Способ 2. Поставить большой рамер окна
-        #Виджеты растянутся чтобы занимать весь размер.
+        #РЎРїРѕСЃРѕР± 2. РџРѕСЃС‚Р°РІРёС‚СЊ Р±РѕР»СЊС€РѕР№ СЂР°РјРµСЂ РѕРєРЅР°
+        #Р’РёРґР¶РµС‚С‹ СЂР°СЃС‚СЏРЅСѓС‚СЃСЏ С‡С‚РѕР±С‹ Р·Р°РЅРёРјР°С‚СЊ РІРµСЃСЊ СЂР°Р·РјРµСЂ.
         self.resize(QtCore.QSize(QtGui.QDesktopWidget().availableGeometry().width() * 0.9, 
                                  QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
                     
@@ -37,6 +37,7 @@ class GUIWindow(QtGui.QMainWindow):
         # Build the controls portion of the window
         controls_layout = QtGui.QVBoxLayout()
         controls_layout.addWidget(self._controls_widget)
+
         controls_layout.addWidget(self._control_button)
         self._controls_widget.setMinimumWidth(400)
         
@@ -48,7 +49,7 @@ class GUIWindow(QtGui.QMainWindow):
     def initialize(self):
         self._pipeline.initialize_all_nodes()
         for node_widget in self._node_widgets:
-            node_widget.setMinimumWidth(400)
+            node_widget.setMinimumWidth(600)
             
             # insert widget at before-the-end pos (just before controls widget)
             self.centralWidget().insertWidget(self.centralWidget().count()-1, node_widget)
