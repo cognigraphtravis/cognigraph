@@ -18,13 +18,6 @@ class GUIWindow(QtGui.QMainWindow):
         self._control_button = QtGui.QPushButton("Start")
         self._control_button.clicked.connect(self._toggle_timer)
 
-        #Способ 1. Поставить ширину виджета равную 0.9 ширины окна делить на кол-во виджетов
-        #Я использую QSplitter, значит минимальная ширина значит только что меньше нее виджет скрывается
-        #По умолчанию скорее всего виджет будет больше, в соответствии с шириной окна
-        #self._widget_width = QtGui.QDesktopWidget().availableGeometry().width() * 0.9 / (len(pipeline._outputs) + 1);
-        
-        #Способ 2. Поставить большой рамер окна
-        #Виджеты растянутся чтобы занимать весь размер.
         self.resize(QtCore.QSize(QtGui.QDesktopWidget().availableGeometry().width() * 0.9, 
                                  QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
                     

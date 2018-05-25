@@ -1,6 +1,8 @@
 import os
 from types import SimpleNamespace
 
+from PyQt4.QtCore import pyqtSignal, QObject
+
 import mne
 import nibabel as nib
 import numpy as np
@@ -88,7 +90,7 @@ class ThreeDeeBrain(OutputNode):
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
     LIMITS_MODES = SimpleNamespace(GLOBAL='Global', LOCAL='Local', MANUAL='Manual')
-
+    
     def __init__(self, take_abs=True, limits_mode=LIMITS_MODES.LOCAL, buffer_length=1, threshold_pct=50,
                  **brain_painter_kwargs):
         super().__init__()
@@ -101,7 +103,7 @@ class ThreeDeeBrain(OutputNode):
         self._threshold_pct = threshold_pct
 
         self._limits_buffer = None  # type: RingBuffer
-        self._brain_painter = BrainPainter(threshold_pct=threshold_pct, **brain_painter_kwargs)
+        self._brain_painter = BrainPainter(threshold_pct=threshold_pct, **brain_painter_kwargs)        
 
     @property
     def threshold_pct(self):
@@ -161,7 +163,9 @@ class ThreeDeeBrain(OutputNode):
             raise AttributeError('{} does not have widget yet. Probably has not been initialized')
 
 
-class BrainPainter(object):
+class BrainPainter(QObject):
+    draw_sig = pyqtSignal('PyQt_PyObject')
+    
     def __init__(self, threshold_pct=50,
                  brain_colormap: matplotlib_Colormap = cm.Greys,
                  data_colormap: matplotlib_Colormap = cm.Reds,
@@ -174,6 +178,7 @@ class BrainPainter(object):
         :param show_curvature: If True, concave areas will be shown in darker grey, convex - in lighter
         :param surfaces_dir: Path to the Fressurfer surf directory. If None, mne's sample's surfaces will be used.
         """
+        super().__init__()
 
         self.threshold_pct = threshold_pct
         self.show_curvature = show_curvature
@@ -188,6 +193,8 @@ class BrainPainter(object):
 
         self.background_colors = None  # type: np.ndarray  # N x 4
         self.mesh_item = None  # type: gl.GLMeshItem
+        
+        self.draw_sig.connect(self.on_draw)
 
     def initialize(self, mne_forward_model_file_path):
         self.surfaces_dir = self.surfaces_dir or self._guess_surfaces_dir_based_on(mne_forward_model_file_path)
@@ -205,18 +212,20 @@ class BrainPainter(object):
         self.mesh_item = gl.GLMeshItem(meshdata=self.mesh_data, shader='shaded')
         self.widget.addItem(self.mesh_item)
 
-    def draw(self, normalized_values):
-
+    def on_draw(self, normalized_values):
         sources_smoothed = self.smoothing_matrix.dot(normalized_values)
         colors = self.data_colormap(sources_smoothed)
-
+    
         threshold = self.threshold_pct / 100
         invisible_mask = sources_smoothed <= threshold
         colors[invisible_mask] = self.background_colors[invisible_mask]
         colors[~invisible_mask] *= self.background_colors[~invisible_mask, 0, np.newaxis]
-
+    
         self.mesh_data.setVertexColors(colors)
         self.mesh_item.meshDataChanged()
+
+    def draw(self, normalized_values):
+        self.draw_sig.emit(normalized_values)
 
     def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:
         surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))

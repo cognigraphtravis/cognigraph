@@ -80,14 +80,23 @@ with source.not_triggering_reset():
 
 
 # Подключаем таймер окна к обновлению пайплайна
+class AsyncUpdater(QtCore.QRunnable):
+    def __init__(self):
+        super(AsyncUpdater, self).__init__()
 
+    def run(self):
+        pipeline.update_all_nodes()
+
+pool = QtCore.QThreadPool.globalInstance()
 def run():
-    pipeline.update_all_nodes()
+    global pool
+    updater = AsyncUpdater()
+    pool.waitForDone()
+    pool.start(updater)
 
 window.timer.timeout.connect(run)
 frequency = pipeline.frequency
 window.timer.setInterval(1000. / frequency * 10)
-
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
 import numpy as np
