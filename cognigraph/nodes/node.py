@@ -1,3 +1,4 @@
+import time
 from typing import Tuple, Dict
 from contextlib import contextmanager
 
@@ -6,7 +7,10 @@ import mne
 from mne.io.pick import channel_type
 
 from ..helpers.misc import class_name_of
+import logging
 
+logging.basicConfig(filename='cognigraph.log',level=logging.INFO,
+                    format='%(asctime)s:%(name)-17s:%(levelname)s:%(message)s')
 
 class Message(object):
     """Class to hold messages that need to be delivered to the descendant nodes before they update"""
@@ -61,6 +65,7 @@ class Node(object):
         self._input_history_is_no_longer_valid = False
 
         self._saved_from_upstream = None  # type: dict  # Used to determine whether upstream changes warrant
+        self.logger = logging.getLogger(type(self).__name__)
         # reinitialization
 
     @property
@@ -101,6 +106,8 @@ class Node(object):
         self._receivers.pop(receiver_node, None)
 
     def initialize(self):
+        self.logger.info('Initialize')
+        t1 = time.time()
         if self._initialized is True and self._should_reinitialize is False:
             raise ValueError('Trying to initialize even though there is no indication for it.')
 
@@ -114,6 +121,8 @@ class Node(object):
         with self.not_triggering_reset():
             print('Initializing the {} node'.format(class_name_of(self)))
             self._initialize()
+            t2 = time.time()
+            self.logger.info('Finish initialization in {:.1f} ms'.format((t2 - t1) * 1000))
             self._initialized = True
 
             self._no_pending_changes = True  # Set all the resetting flags to false
@@ -150,6 +159,7 @@ class Node(object):
             receiver_node.receive_a_message(message)
 
     def update(self) -> None:
+        t1 = time.time()
         self.output = None  # Reset output in case update does not succeed
 
         if self._there_has_been_an_upstream_change is True:
@@ -169,6 +179,8 @@ class Node(object):
                 self.reset()
             if self._input_history_is_no_longer_valid is True:
                 self.on_input_history_invalidation()
+        t2 = time.time()
+        self.logger.info('Updated in {:.1f} ms'.format((t2 - t1) * 1000))
 
     def _update(self):
         raise NotImplementedError('_update should be implemented')
