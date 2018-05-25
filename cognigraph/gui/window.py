@@ -14,9 +14,8 @@ class GUIWindow(QtGui.QMainWindow):
         self._controls_widget = self._controls.widget
         
         #Start button and timer
-        self.timer = QtCore.QTimer()
-        self._control_button = QtGui.QPushButton("Start")
-        self._control_button.clicked.connect(self._toggle_timer)
+        self.control_button = QtGui.QPushButton("Start")
+        self.control_button.clicked.connect(self._toggle_button)
 
         self.resize(QtCore.QSize(QtGui.QDesktopWidget().availableGeometry().width() * 0.9, 
                                  QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
@@ -31,7 +30,7 @@ class GUIWindow(QtGui.QMainWindow):
         controls_layout = QtGui.QVBoxLayout()
         controls_layout.addWidget(self._controls_widget)
 
-        controls_layout.addWidget(self._control_button)
+        controls_layout.addWidget(self.control_button)
         self._controls_widget.setMinimumWidth(400)
         
         # Add control portion to the main widget      
@@ -47,13 +46,11 @@ class GUIWindow(QtGui.QMainWindow):
             # insert widget at before-the-end pos (just before controls widget)
             self.centralWidget().insertWidget(self.centralWidget().count()-1, node_widget)
 
-    def _toggle_timer(self):
-        if self.timer.isActive():
-            self.timer.stop()
-            self._control_button.setText("Start")
+    def _toggle_button(self):
+        if self.control_button.text() == "Pause":
+            self.control_button.setText("Start")
         else:
-            self.timer.start()
-            self._control_button.setText("Pause")            
+            self.control_button.setText("Pause")            
             
     @property
     def _node_widgets(self) -> List[QtGui.QWidget]:

@@ -165,6 +165,7 @@ class ThreeDeeBrain(OutputNode):
 
 class BrainPainter(QObject):
     draw_sig = pyqtSignal('PyQt_PyObject')
+    calls_made = 0
     
     def __init__(self, threshold_pct=50,
                  brain_colormap: matplotlib_Colormap = cm.Greys,
@@ -213,18 +214,22 @@ class BrainPainter(QObject):
         self.widget.addItem(self.mesh_item)
 
     def on_draw(self, normalized_values):
-        sources_smoothed = self.smoothing_matrix.dot(normalized_values)
-        colors = self.data_colormap(sources_smoothed)
-    
-        threshold = self.threshold_pct / 100
-        invisible_mask = sources_smoothed <= threshold
-        colors[invisible_mask] = self.background_colors[invisible_mask]
-        colors[~invisible_mask] *= self.background_colors[~invisible_mask, 0, np.newaxis]
-    
-        self.mesh_data.setVertexColors(colors)
-        self.mesh_item.meshDataChanged()
+        self.calls_made -= 1
+            
+        if self.calls_made == 0: # Only redraw on last call            
+            sources_smoothed = self.smoothing_matrix.dot(normalized_values)
+            colors = self.data_colormap(sources_smoothed)
+        
+            threshold = self.threshold_pct / 100
+            invisible_mask = sources_smoothed <= threshold
+            colors[invisible_mask] = self.background_colors[invisible_mask]
+            colors[~invisible_mask] *= self.background_colors[~invisible_mask, 0, np.newaxis]
+        
+            self.mesh_data.setVertexColors(colors)
+            self.mesh_item.meshDataChanged()
 
     def draw(self, normalized_values):
+        self.calls_made += 1
         self.draw_sig.emit(normalized_values)
 
     def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:

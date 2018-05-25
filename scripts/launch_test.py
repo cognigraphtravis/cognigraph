@@ -51,7 +51,7 @@ pipeline.add_output(signal_viewer, input_node=linear_filter)
 window = GUIWindow(pipeline=pipeline)
 window.init_ui()
 window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-window.show()
+#window.show() # Will show after init
 
 
 # Инициализируем все узлы
@@ -81,23 +81,46 @@ with source.not_triggering_reset():
 
 # Подключаем таймер окна к обновлению пайплайна
 class AsyncUpdater(QtCore.QRunnable):
+    _stop_flag = False
+    
     def __init__(self):
         super(AsyncUpdater, self).__init__()
+        self.setAutoDelete(False)
 
     def run(self):
-        pipeline.update_all_nodes()
+        self._stop_flag = False
+        
+        while self._stop_flag == False:
+            pipeline.update_all_nodes()
+        
+    def stop(self):
+        self._stop_flag = True
 
 pool = QtCore.QThreadPool.globalInstance()
-def run():
-    global pool
-    updater = AsyncUpdater()
-    pool.waitForDone()
-    pool.start(updater)
+updater = AsyncUpdater()
+is_paused = True
 
-window.timer.timeout.connect(run)
-frequency = pipeline.frequency
-window.timer.setInterval(1000. / frequency * 10)
+def toggle_updater():
+    global pool
+    global updater
+    global is_paused
+    
+    if is_paused == True:
+        is_paused = False
+        pool.start(updater)
+    else:
+        is_paused = True
+        updater.stop()
+        pool.waitForDone()
+        
+window.control_button.clicked.connect(toggle_updater)
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
 import numpy as np
 np.warnings.filterwarnings('ignore')
+
+# Show window and exit on close
+window.show()
+updater.stop()
+pool.waitForDone()
+sys.exit(app.exec_())
