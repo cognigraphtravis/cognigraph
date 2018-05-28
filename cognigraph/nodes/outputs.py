@@ -1,4 +1,5 @@
 import os
+import time
 from types import SimpleNamespace
 
 from PyQt4.QtCore import pyqtSignal, QObject
@@ -165,7 +166,7 @@ class ThreeDeeBrain(OutputNode):
 
 class BrainPainter(QObject):
     draw_sig = pyqtSignal('PyQt_PyObject')
-    calls_made = 0
+    time_since_draw = time.time()
     
     def __init__(self, threshold_pct=50,
                  brain_colormap: matplotlib_Colormap = cm.Greys,
@@ -214,9 +215,11 @@ class BrainPainter(QObject):
         self.widget.addItem(self.mesh_item)
 
     def on_draw(self, normalized_values):
-        self.calls_made -= 1
+        now = time.time()
+        
+        if (now - self.time_since_draw) >= 0.1: # Redraw only at 10Hz
+            self.time_since_draw = now
             
-        if self.calls_made == 0: # Only redraw on last call            
             sources_smoothed = self.smoothing_matrix.dot(normalized_values)
             colors = self.data_colormap(sources_smoothed)
         
@@ -229,7 +232,6 @@ class BrainPainter(QObject):
             self.mesh_item.meshDataChanged()
 
     def draw(self, normalized_values):
-        self.calls_made += 1
         self.draw_sig.emit(normalized_values)
 
     def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:

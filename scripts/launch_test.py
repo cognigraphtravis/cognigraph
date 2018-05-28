@@ -1,4 +1,5 @@
 ﻿import sys
+import time
 
 from pyqtgraph import QtCore, QtGui
 import mne
@@ -78,7 +79,6 @@ start_s, stop_s = 80, 100
 with source.not_triggering_reset():
     source.data, _ = read_brain_vision_data(vhdr_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 
-
 # Подключаем таймер окна к обновлению пайплайна
 class AsyncUpdater(QtCore.QRunnable):
     _stop_flag = False
@@ -91,7 +91,13 @@ class AsyncUpdater(QtCore.QRunnable):
         self._stop_flag = False
         
         while self._stop_flag == False:
+            start = time.time()
             pipeline.update_all_nodes()
+            end = time.time()
+            
+            # Force sleep to update at 10Hz
+            if end - start < 0.1:
+                time.sleep(0.1 - (end - start))
         
     def stop(self):
         self._stop_flag = True
