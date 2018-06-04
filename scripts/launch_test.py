@@ -1,4 +1,5 @@
 ﻿import sys
+import time
 
 from pyqtgraph import QtCore, QtGui
 import mne
@@ -51,7 +52,7 @@ pipeline.add_output(signal_viewer, input_node=linear_filter)
 window = GUIWindow(pipeline=pipeline)
 window.init_ui()
 window.setWindowFlags(QtCore.Qt.WindowStaysOnTopHint)
-window.show()
+#window.show() # Will show after init
 
 
 # Инициализируем все узлы
@@ -78,17 +79,54 @@ start_s, stop_s = 80, 100
 with source.not_triggering_reset():
     source.data, _ = read_brain_vision_data(vhdr_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 
-
 # Подключаем таймер окна к обновлению пайплайна
+class AsyncUpdater(QtCore.QRunnable):
+    _stop_flag = False
+    
+    def __init__(self):
+        super(AsyncUpdater, self).__init__()
+        self.setAutoDelete(False)
 
-def run():
-    pipeline.update_all_nodes()
+    def run(self):
+        self._stop_flag = False
+        
+        while self._stop_flag == False:
+            start = time.time()
+            pipeline.update_all_nodes()
+            end = time.time()
+            
+            # Force sleep to update at 10Hz
+            if end - start < 0.1:
+                time.sleep(0.1 - (end - start))
+        
+    def stop(self):
+        self._stop_flag = True
 
-window.timer.timeout.connect(run)
-frequency = pipeline.frequency
-window.timer.setInterval(1000. / frequency * 10)
+pool = QtCore.QThreadPool.globalInstance()
+updater = AsyncUpdater()
+is_paused = True
 
+def toggle_updater():
+    global pool
+    global updater
+    global is_paused
+    
+    if is_paused == True:
+        is_paused = False
+        pool.start(updater)
+    else:
+        is_paused = True
+        updater.stop()
+        pool.waitForDone()
+        
+window.control_button.clicked.connect(toggle_updater)
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
 import numpy as np
 np.warnings.filterwarnings('ignore')
+
+# Show window and exit on close
+window.show()
+updater.stop()
+pool.waitForDone()
+sys.exit(app.exec_())
