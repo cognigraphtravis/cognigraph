@@ -65,7 +65,8 @@ class Preprocessing(ProcessorNode):
     CHANGES_IN_THESE_REQUIRE_RESET = ('collect_for_x_seconds', )
 
     def _initialize(self):
-        frequency = self.traverse_back_and_find('mne_info')['sfreq']
+        self.mne_info = self.traverse_back_and_find('mne_info')
+        frequency = self.mne_info['sfreq']
         self._samples_to_be_collected = int(math.ceil(
             self.collect_for_x_seconds * frequency))
 
@@ -95,11 +96,13 @@ class Preprocessing(ProcessorNode):
             standard_deviations = self._calculate_standard_deviations()
             self._bad_channel_indices = find_outliers(standard_deviations)
             if any(self._bad_channel_indices):
-                self._interpolation_matrix =\
-                        self._calculate_interpolation_matrix()
-                message = Message(there_has_been_a_change=True,
-                                  output_history_is_no_longer_valid=True)
-                self._deliver_a_message_to_receivers(message)
+                # self._interpolation_matrix =\
+                #         self._calculate_interpolation_matrix()
+                # message = Message(there_has_been_a_change=True,
+                #                   output_history_is_no_longer_valid=True)
+                # self._deliver_a_message_to_receivers(message)
+                # self.mne_info['bads'].append(self._bad_channel_indices)
+                pass
 
         self.output = self._interpolate(self.input_node.output)
 
