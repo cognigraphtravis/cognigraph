@@ -223,3 +223,24 @@ class MCEControls(ProcessorNodeControls):
     def _on_method_changed(self, param, value):
         # self._processor_node.method = value
         pass
+
+
+class ICARejectionControls(ProcessorNodeControls):
+    CONTROLS_LABEL = 'ICA rejection'
+    PROCESSOR_CLASS = processors.MCE
+
+    METHODS_COMBO_NAME = 'Method: '
+
+    def _create_parameters(self):
+
+        # method_values = self.PROCESSOR_CLASS.SUPPORTED_METHODS
+        # method_value = self._processor_node.method
+        # methods_combo = parameterTypes.ListParameter(name=self.METHODS_COMBO_NAME,
+        #                                              values=method_values, value=method_value)
+        # methods_combo.sigValueChanged.connect(self._on_method_changed)
+        # self.methods_combo = self.addChild(methods_combo)
+        pass
+
+    def _on_method_changed(self, param, value):
+        # self._processor_node.method = value
+        pass

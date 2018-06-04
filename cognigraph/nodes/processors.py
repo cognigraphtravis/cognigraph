@@ -3,6 +3,9 @@ import time
 from typing import Tuple, List
 import math
 
+from vendor.nfb.pynfb.protocols.ssd.topomap_selector_ica import ICADialog
+from PyQt4.QtGui import QApplication
+
 import numpy as np
 import mne
 from numpy.linalg import svd
@@ -705,4 +708,109 @@ class MCE(ProcessorNode):
         output_mce[:,-1] = sol.x
         self.output = output_mce
         self.sol = sol
-        return Q, QQ, A_eq, data_slice, b_eq, c
+        return Q, A_eq, data_slice, b_eq, c
+
+
+
+class ICARejection(ProcessorNode):
+
+    def __init__(self, collect_for_x_seconds: int=60):
+        super().__init__()
+        self.collect_for_x_seconds = collect_for_x_seconds  # type: int
+
+        self._samples_collected = None  # type: int
+        self._samples_to_be_collected = None  # type: int
+        self._enough_collected = None  # type: bool
+
+        self._reset_statistics()
+        self._ica_rejector = None
+
+    def _on_input_history_invalidation(self):
+        self._reset_statistics()
+
+    def _check_value(self, key, value):
+        pass
+
+    CHANGES_IN_THESE_REQUIRE_RESET = ('collect_for_x_seconds', )
+
+    def _initialize(self):
+        self._mne_info = self.traverse_back_and_find('mne_info')
+        self._frequency = self._mne_info['sfreq']
+        self._good_ch_inds = mne.pick_types(self._mne_info, eeg=True,
+                                            meg=False, stim=False,
+                                            exclude='bads')
+
+        channels = self._mne_info['chs']
+        self._ch_locs = np.array([ch['loc'] for ch in channels])
+
+        n_ch = len(self._good_ch_inds)
+        self._samples_to_be_collected = int(math.ceil(
+            self.collect_for_x_seconds * self._frequency))
+        self._collected_timeseries = np.zeros(
+                [n_ch, self._samples_to_be_collected])
+        self._linear_filter = filters.ButterFilter(
+                [1,200], fs=self._frequency,
+                n_channels=len(self._good_ch_inds))
+        self._linear_filter.apply = pynfb_ndarray_function_wrapper(
+                self._linear_filter.apply)
+
+
+    def _reset(self) -> bool:
+        self._reset_statistics()
+        self._input_history_is_no_longer_valid = True
+        return self._input_history_is_no_longer_valid
+
+    def _reset_statistics(self):
+        self._samples_collected = 0
+        self._enough_collected = False
+
+    def _update(self):
+        # Have we collected enough samples without the new input?
+        self.output = self.input_node.output
+        
+        enough_collected = self._samples_collected >=\
+                self._samples_to_be_collected
+        if not enough_collected:
+            if self.input_node.output is not None and\
+                    self.input_node.output.shape[TIME_AXIS] > 0:
+                self._update_statistics()
+
+        elif not self._enough_collected:  # We just got enough samples
+            self._enough_collected = True
+            print('COLLECTED ENOUGH SAMPLES')
+            # new_win = QApplication([])
+            ica = ICADialog(
+                    self._collected_timeseries.T,
+                    list(np.array(self._mne_info['ch_names'])[self._good_ch_inds]),
+                    self._ch_locs[self._good_ch_inds,:],
+                    self._frequency
+                  )
+
+            ica.exec_()
+            self._ica_rejector = ica.rejection.val.T
+        else:
+            self.output[self._good_ch_inds, :] = np.dot(
+                    self._ica_rejector,
+                    self.input_node.output[self._good_ch_inds, :])
+
+
+
+    def _update_statistics(self):
+        input_array = self.input_node.output.astype(np.dtype('float64'))
+        n = self._samples_collected
+        # print(n)
+        m = input_array.shape[TIME_AXIS]  # number of new samples
+        # print(m)
+        # print(self._collected_timeseries.shape)
+        self._samples_collected += m
+        self._collected_timeseries[:,n:n + m] = self._linear_filter.apply(
+                input_array[self._good_ch_inds,:])
+        # self._collected_timeseries[:,]
+        # Using float64 is necessary because otherwise rounding error
+        # in recursive formula accumulate
+        pass
+
+
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
+    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
+
