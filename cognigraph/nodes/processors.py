@@ -665,15 +665,15 @@ class MCE(ProcessorNode):
         stc_slice = apply_inverse_raw(raw_slice, self.mne_inv,
                                       pick_ori='vector',
                                       method='MNE', lambda2=1)
-        # print(stc_slice.shape)
         Q = normalize(stc_slice.data[:, :, 0])  # dipole orientations
-        QQ = block_diag(*Q).T                   # matrix with dipole orientats
         # ------------------------------------------------------------------- #
 
         # -------- setup linprog params -------- #
-        A_eq = self.A_non_ori @ QQ
-        # data_slice = raw_c.get_data()[:, slice_ind]
-        data_slice = raw_slice.get_data()[:,0]
+        n_sen = self.A_non_ori.shape[0]
+        A_eq = np.empty([n_sen, n_src])
+        for i in range(n_src):
+            A_eq[:, i] = self.A_non_ori[:, i * 3: (i + 1) * 3] @ Q[i,:].T
+        data_slice = raw_slice.get_data()[:, 0]
         b_eq = self.Un.T @ data_slice
         c = np.ones(A_eq.shape[1])
         # -------------------------------------- #
