@@ -278,7 +278,7 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
     
     # Compute spatial filters
     W = np.dot(G.T, Cm_inv)
-    is_free_ori = beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori, pick_ori, weight_norm, reduce_rank, noise)
+    W, is_free_ori = beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori, pick_ori, weight_norm, reduce_rank, noise)
     # n_orient = 3 if is_free_ori else 1
     # n_sources = G.shape[1] // n_orient
     # for k in range(n_sources):
@@ -368,11 +368,11 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
     #             Wk[:] *= noise_norm_inv
 
     # Pick source orientation maximizing output source power
-    if pick_ori == 'max-power':
-        W = W[0::3]
-    elif pick_ori == 'normal':
-        W = W[2::3]
-        is_free_ori = False
+    # if pick_ori == 'max-power':
+    #     W = W[0::3]
+    # elif pick_ori == 'normal':
+    #     W = W[2::3]
+    #     is_free_ori = False
 
     filters = dict(weights=W, data_cov=data_cov, noise_cov=noise_cov,
                    whitener=whitener, weight_norm=weight_norm,

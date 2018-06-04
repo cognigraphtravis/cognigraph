@@ -419,30 +419,6 @@ class Beamformer(ProcessorNode):
                                       'fixed_orientation')
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
-    def _calculate_kernel(self, Rxx):
-        Rxx_inv = self._regularized_inverse(Rxx)
-
-        G = self._gain_matrix
-
-        if self.fixed_orientation is True:
-            denominators = 1 / apply_quad_form_to_columns(A=Rxx_inv, X=G)
-            return G.T.dot(Rxx_inv) * np.expand_dims(denominators, TIME_AXIS)
-
-        else:  # Free orientation
-            vertex_count = int(G.shape[1] / 3)
-            kernel = np.zeros(np.flipud(G.shape))
-            for idx in range(vertex_count):
-                vertex_slice = slice(idx * 3, idx * 3 + 3)
-                Gi = G[:, vertex_slice]
-                denominator = Gi.T.dot(Rxx_inv).dot(Gi)
-                kernel[vertex_slice, :] = np.linalg.inv(denominator).dot(Gi.T.dot(Rxx_inv))
-            return kernel
-
-    def _regularized_inverse(self, Rxx):
-        electrode_count = Rxx.shape[0]
-        _lambda = 1 / self.snr ** 2 * Rxx.trace() / electrode_count
-        return np.linalg.inv(Rxx + _lambda * np.eye(electrode_count))
-
     def _update(self):
 
         # input_array = get_a_subset_of_channels(self.input_node.output, self._channel_indices)
