@@ -20,7 +20,7 @@ pipeline = Pipeline()
 launch_test_filepath = QtGui.QFileDialog.getOpenFileName(caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")
 source = sources.BrainvisionSource(file_path=launch_test_filepath)
 source.loop_the_file = True
-source.MAX_SAMPLES_IN_CHUNK = 30
+source.MAX_SAMPLES_IN_CHUNK = 10000
 pipeline.source = source
 
 
@@ -31,7 +31,7 @@ pipeline.add_processor(preprocessing)
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
 pipeline.add_processor(linear_filter)
 
-inverse_model = processors.InverseModel(method='MNE', snr=3.0)
+inverse_model = processors.InverseModel(method='dSPM', snr=3.0)
 pipeline.add_processor(inverse_model)
 
 envelope_extractor = processors.EnvelopeExtractor()
@@ -41,7 +41,7 @@ pipeline.add_processor(envelope_extractor)
 global_mode = outputs.ThreeDeeBrain.LIMITS_MODES.GLOBAL
 three_dee_brain = outputs.ThreeDeeBrain(limits_mode=global_mode, buffer_length=6)
 pipeline.add_output(three_dee_brain)
-pipeline.add_output(outputs.LSLStreamOutput())
+# pipeline.add_output(outputs.LSLStreamOutput())
 
 signal_viewer = outputs.SignalViewer()
 pipeline.add_output(signal_viewer, input_node=linear_filter)

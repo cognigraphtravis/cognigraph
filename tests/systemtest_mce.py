@@ -1,10 +1,11 @@
 """Integration test to check mce performance"""
-
+import time
 import sys
 import os.path as op
 
 from pyqtgraph import QtCore, QtGui
 
+from cognigraph.helpers.brainvision import read_fif_data
 from cognigraph.pipeline import Pipeline
 from cognigraph.nodes import sources, processors, outputs
 from cognigraph import TIME_AXIS
@@ -18,7 +19,7 @@ cur_dir =  '/home/dmalt/Code/python/cogni_submodules'
 test_data_path = cur_dir + '/tests/data/'
 print(test_data_path)
 sim_data_fname = 'raw_sim.fif'
-# sim_data_fname = 'Koleno.fif'
+sim_data_fname = 'Koleno.fif'
 # fwd_fname = 'dmalt_custom_lr-fwd.fif'
 fwd_fname = 'dmalt_custom_mr-fwd.fif'
 
@@ -28,6 +29,8 @@ fwd_path = op.join(test_data_path, fwd_fname)
 sim_data_path = op.join(test_data_path, sim_data_fname)
 
 source = sources.FifSource(file_path=sim_data_path)
+source.loop_the_file = True
+source.MAX_SAMPLES_IN_CHUNK = 10000
 pipeline.source = source
 
 # Processors
@@ -82,28 +85,77 @@ three_dee_brain_controls.limits_mode_combo.setValue('Local')
 
 window.initialize()
 
+start_s, stop_s = 80, 100
+with source.not_triggering_reset():
+    source.data, _ = read_fif_data(sim_data_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 
-def run():
-    pipeline.update_all_nodes()
-    # print(pipeline.source._samples_already_read / 500)
+class AsyncUpdater(QtCore.QRunnable):
+    _stop_flag = False
+    
+    def __init__(self):
+        super(AsyncUpdater, self).__init__()
+        self.setAutoDelete(False)
+
+    def run(self):
+        self._stop_flag = False
+        
+        while self._stop_flag == False:
+            start = time.time()
+            pipeline.update_all_nodes()
+            end = time.time()
+            
+            # Force sleep to update at 10Hz
+            if end - start < 0.1:
+                time.sleep(0.1 - (end - start))
+        
+    def stop(self):
+        self._stop_flag = True
+
+pool = QtCore.QThreadPool.globalInstance()
+updater = AsyncUpdater()
+is_paused = True
+
+def toggle_updater():
+    global pool
+    global updater
+    global is_paused
+    
+    if is_paused == True:
+        is_paused = False
+        pool.start(updater)
+    else:
+        is_paused = True
+        updater.stop()
+        pool.waitForDone()
+        
+window.control_button.clicked.connect(toggle_updater)
+import numpy as np
+np.warnings.filterwarnings('ignore')
+window.show()
+updater.stop()
+pool.waitForDone()
+sys.exit(app.exec_())
+# def run():
+#     pipeline.update_all_nodes()
+#     # print(pipeline.source._samples_already_read / 500)
 
 
-timer = QtCore.QTimer()
-timer.timeout.connect(run)
-frequency = pipeline.frequency
-output_frequency = 10
-# timer.setInterval(1000. / frequency * 500)
-timer.setInterval(1000. / output_frequency)
+# timer = QtCore.QTimer()
+# timer.timeout.connect(run)
+# frequency = pipeline.frequency
+# output_frequency = 10
+# # timer.setInterval(1000. / frequency * 500)
+# timer.setInterval(1000. / output_frequency)
 
-source.loop_the_file = False
-source.MAX_SAMPLES_IN_CHUNK = 10000
-# envelope.disabled = True
+# source.loop_the_file = False
+# source.MAX_SAMPLES_IN_CHUNK = 10000
+# # envelope.disabled = True
 
 
-if __name__ == '__main__':
-    import sys
+# if __name__ == '__main__':
+#     import sys
 
-    timer.start()
+#     timer.start()
     # timer.stop()
 
     # TODO: this runs when in iPython. It should not.
