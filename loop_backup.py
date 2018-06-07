@@ -68,7 +68,6 @@ def beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori, pick_ori, weight_norm, reduc
     # print('big product: {:.3f}'.format((time() - tprev) * 1000))
     G = np.asfortranarray(G)
     # W = np.asfortranarray(W)
-    print(W.shape)
     max_ori = np.empty(n_orient * n_sources, order='F')
     pwr = np.empty(n_sources, order='F')
     tmp_prod = np.empty((3 * n_sources, 3))
@@ -146,10 +145,7 @@ def beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori, pick_ori, weight_norm, reduc
     # pwr = np.diag(pwr_mat)
 
     denom = np.sqrt(pwr)
-    print('Denom shape = ')
-    print(denom.shape)
     W /= np.expand_dims(denom, axis=1)
-    print(W.shape)
 
     is_free_ori = False
     # tend = time()
