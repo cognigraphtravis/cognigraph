@@ -1,7 +1,7 @@
 ﻿import sys
 import time
 
-from pyqtgraph import QtCore, QtGui
+from PyQt5 import QtCore, QtGui
 import mne
 import os
 
@@ -17,7 +17,7 @@ app = QtGui.QApplication(sys.argv)
 
 pipeline = Pipeline()
 
-launch_test_filepath = QtGui.QFileDialog.getOpenFileName(caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")
+launch_test_filepath = QtGui.QFileDialog.getOpenFileName(caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")[0]
 source = sources.BrainvisionSource(file_path=launch_test_filepath)
 source.loop_the_file = True
 source.MAX_SAMPLES_IN_CHUNK = 30
