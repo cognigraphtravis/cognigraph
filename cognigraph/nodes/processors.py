@@ -4,7 +4,7 @@ from typing import Tuple, List
 import math
 
 from vendor.nfb.pynfb.protocols.ssd.topomap_selector_ica import ICADialog
-from PyQt4.QtGui import QApplication
+from PyQt5.QtGui import QApplication
 
 import numpy as np
 import mne
