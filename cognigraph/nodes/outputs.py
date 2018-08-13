@@ -2,7 +2,7 @@ import os
 import time
 from types import SimpleNamespace
 
-from PyQt4.QtCore import pyqtSignal, QObject
+from PyQt5.QtCore import pyqtSignal, QObject
 
 import mne
 import nibabel as nib
