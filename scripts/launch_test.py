@@ -1,7 +1,7 @@
 ﻿import sys
 import time
 
-sys.path.append('vendor/nfb') # For nfb submodule
+sys.path.append('../vendor/nfb') # For nfb submodule
 
 from PyQt5 import QtCore, QtGui
 import mne
