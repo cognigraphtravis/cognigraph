@@ -5,6 +5,7 @@ from PyQt5 import QtCore, QtGui
 from ..pipeline import Pipeline
 from .controls import Controls
 
+from .screen_recorder import ScreenRecorder
 
 class GUIWindow(QtGui.QMainWindow):
     def __init__(self, pipeline=Pipeline()):
@@ -12,15 +13,20 @@ class GUIWindow(QtGui.QMainWindow):
         self._pipeline = pipeline  # type: Pipeline
         self._controls = Controls(pipeline=self._pipeline)
         self._controls_widget = self._controls.widget
-
-        # Start button and timer
-        self.control_button = QtGui.QPushButton("Start")
-        self.control_button.clicked.connect(self._toggle_button)
-
-        self.resize(QtCore.QSize(
-            QtGui.QDesktopWidget().availableGeometry().width() * 0.9,
-            QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
-
+        
+        # Start button
+        self.run_button = QtGui.QPushButton("Start")
+        self.run_button.clicked.connect(self._toggle_run_button)
+        
+        # Record gif button and recorder
+        self._gif_recorder = ScreenRecorder()
+        self.gif_button = QtGui.QPushButton("Record gif")
+        self.gif_button.clicked.connect(self._toggle_gif_button)
+        
+        # Resize screen
+        self.resize(QtCore.QSize(QtGui.QDesktopWidget().availableGeometry().width() * 0.9, 
+                                 QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
+                    
     def init_ui(self):
         self._controls.initialize()
 
@@ -30,8 +36,13 @@ class GUIWindow(QtGui.QMainWindow):
         # Build the controls portion of the window
         controls_layout = QtGui.QVBoxLayout()
         controls_layout.addWidget(self._controls_widget)
-
-        controls_layout.addWidget(self.control_button)
+        
+        buttons_layout = QtGui.QHBoxLayout()
+        buttons_layout.addWidget(self.run_button)
+        buttons_layout.addWidget(self.gif_button)
+        
+        controls_layout.addLayout(buttons_layout)
+        
         self._controls_widget.setMinimumWidth(400)
 
         # Add control portion to the main widget
@@ -48,12 +59,27 @@ class GUIWindow(QtGui.QMainWindow):
             self.centralWidget().insertWidget(self.centralWidget().count() - 1,
                                               node_widget)
 
-    def _toggle_button(self):
-        if self.control_button.text() == "Pause":
-            self.control_button.setText("Start")
+    def _toggle_run_button(self):
+        if self.run_button.text() == "Pause":
+            self.run_button.setText("Start")
         else:
-            self.control_button.setText("Pause")
-
+            self.run_button.setText("Pause")            
+    
+    def _toggle_gif_button(self):
+        if self.gif_button.text() == "Stop recording":
+            self.gif_button.setText("Record gif")
+            
+            self._gif_recorder.stop()
+            save_path = QtGui.QFileDialog.getSaveFileName(caption="Save the recording", filter="Gif image (*.gif)")[0]
+            self._gif_recorder.save(save_path)
+        else:
+            widgetRect = self.centralWidget().widget(0).geometry()
+            widgetRect.moveTopLeft(self.centralWidget().mapToGlobal(widgetRect.topLeft()))
+            self._gif_recorder.sector = (widgetRect.left(), widgetRect.top(), widgetRect.right(), widgetRect.bottom())
+            
+            self.gif_button.setText("Stop recording")
+            self._gif_recorder.start()
+        
     @property
     def _node_widgets(self) -> List[QtGui.QWidget]:
         node_widgets = list()

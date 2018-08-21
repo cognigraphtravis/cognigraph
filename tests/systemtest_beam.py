@@ -143,7 +143,7 @@ def toggle_updater():
         updater.stop()
         pool.waitForDone()
         
-window.control_button.clicked.connect(toggle_updater)
+window.run_button.clicked.connect(toggle_updater)
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
 import numpy as np

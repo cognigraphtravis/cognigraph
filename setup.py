@@ -5,8 +5,8 @@ setup(
     name='cognigraph',
     version='0.1.1',
     install_requires=[
-        'pyqt5',
         'pyqtgraph',
+        'pyqt5',
         'mne<=0.15',
         'scipy>=1.0.0',
         'matplotlib',
@@ -17,12 +17,8 @@ setup(
         'pandas',
         'numba',
         'nibabel',
-        'pyopengl'
+        'pyopengl',
+        'pillow',
+        'pyscreenshot'
     ]
 )
-
-# try:
-#         import PyQt4
-#         raise RuntimeError('Cognigraph requires that PyQt4 is NOT installed.')
-# except ImportError:
-#         pass

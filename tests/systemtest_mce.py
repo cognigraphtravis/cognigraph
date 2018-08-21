@@ -128,7 +128,7 @@ def toggle_updater():
         updater.stop()
         pool.waitForDone()
         
-window.control_button.clicked.connect(toggle_updater)
+window.run_button.clicked.connect(toggle_updater)
 import numpy as np
 np.warnings.filterwarnings('ignore')
 window.show()
