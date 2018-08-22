@@ -58,6 +58,16 @@ class GUIWindow(QtGui.QMainWindow):
             # insert widget at before-the-end pos (just before controls widget)
             self.centralWidget().insertWidget(self.centralWidget().count() - 1,
                                               node_widget)
+            self.centralWidget().insertWidget(self.centralWidget().count()-1, node_widget)
+            
+    def moveEvent(self, event):
+        self._reset_gif_sector()
+        return super(GUIWindow, self).moveEvent(event)
+    
+    def _reset_gif_sector(self):
+        widgetRect = self.centralWidget().widget(0).geometry()
+        widgetRect.moveTopLeft(self.centralWidget().mapToGlobal(widgetRect.topLeft()))
+        self._gif_recorder.sector = (widgetRect.left(), widgetRect.top(), widgetRect.right(), widgetRect.bottom())        
 
     def _toggle_run_button(self):
         if self.run_button.text() == "Pause":
@@ -73,9 +83,7 @@ class GUIWindow(QtGui.QMainWindow):
             save_path = QtGui.QFileDialog.getSaveFileName(caption="Save the recording", filter="Gif image (*.gif)")[0]
             self._gif_recorder.save(save_path)
         else:
-            widgetRect = self.centralWidget().widget(0).geometry()
-            widgetRect.moveTopLeft(self.centralWidget().mapToGlobal(widgetRect.topLeft()))
-            self._gif_recorder.sector = (widgetRect.left(), widgetRect.top(), widgetRect.right(), widgetRect.bottom())
+            self._reset_gif_sector()
             
             self.gif_button.setText("Stop recording")
             self._gif_recorder.start()
