@@ -1,6 +1,6 @@
 from typing import List
 
-from pyqtgraph import QtCore, QtGui
+from PyQt5 import QtCore, QtGui
 
 from ..pipeline import Pipeline
 from .controls import Controls
@@ -12,49 +12,48 @@ class GUIWindow(QtGui.QMainWindow):
         self._pipeline = pipeline  # type: Pipeline
         self._controls = Controls(pipeline=self._pipeline)
         self._controls_widget = self._controls.widget
-        
-        #Start button and timer
-        self.timer = QtCore.QTimer()
-        self._control_button = QtGui.QPushButton("Start")
-        self._control_button.clicked.connect(self._toggle_timer)
-        
-        self.main_layout = None  # type: QtGui.QBoxLayout
-        
+
+        # Start button and timer
+        self.control_button = QtGui.QPushButton("Start")
+        self.control_button.clicked.connect(self._toggle_button)
+
+        self.resize(QtCore.QSize(
+            QtGui.QDesktopWidget().availableGeometry().width() * 0.9,
+            QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
+
     def init_ui(self):
         self._controls.initialize()
 
-        central_widget = QtGui.QWidget()
+        central_widget = QtGui.QSplitter()
         self.setCentralWidget(central_widget)
-        
+
         # Build the controls portion of the window
         controls_layout = QtGui.QVBoxLayout()
         controls_layout.addWidget(self._controls_widget)
-        controls_layout.addWidget(self._control_button)        
-        
-        # Add control portion to the main layout
-        main_layout = QtGui.QHBoxLayout()
-        self._controls_widget.setMinimumWidth(400)
-        main_layout.addLayout(controls_layout)
 
-        self.centralWidget().setLayout(main_layout)
-        self.main_layout = main_layout
+        controls_layout.addWidget(self.control_button)
+        self._controls_widget.setMinimumWidth(400)
+
+        # Add control portion to the main widget
+        controls_layout_wrapper = QtGui.QWidget()
+        controls_layout_wrapper.setLayout(controls_layout)
+        self.centralWidget().addWidget(controls_layout_wrapper)
 
     def initialize(self):
         self._pipeline.initialize_all_nodes()
         for node_widget in self._node_widgets:
-            node_widget.setMinimumWidth(400)
-            
-            # insert widget at before-the-end pos (just before controls widget)
-            self.main_layout.insertWidget(self.main_layout.count()-1, node_widget)
+            node_widget.setMinimumWidth(600)
 
-    def _toggle_timer(self):
-        if self.timer.isActive():
-            self.timer.stop()
-            self._control_button.setText("Start")
+            # insert widget at before-the-end pos (just before controls widget)
+            self.centralWidget().insertWidget(self.centralWidget().count() - 1,
+                                              node_widget)
+
+    def _toggle_button(self):
+        if self.control_button.text() == "Pause":
+            self.control_button.setText("Start")
         else:
-            self.timer.start()
-            self._control_button.setText("Pause")            
-            
+            self.control_button.setText("Pause")
+
     @property
     def _node_widgets(self) -> List[QtGui.QWidget]:
         node_widgets = list()

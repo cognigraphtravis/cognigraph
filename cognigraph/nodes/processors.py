@@ -1,5 +1,10 @@
+import time
+
 from typing import Tuple, List
 import math
+
+from vendor.nfb.pynfb.protocols.ssd.topomap_selector_ica import ICADialog
+from PyQt4.QtGui import QApplication
 
 import numpy as np
 import mne
@@ -11,7 +16,9 @@ from mne.preprocessing import find_outliers
 from mne.minimum_norm import apply_inverse_raw  # , make_inverse_operator
 from mne.minimum_norm import make_inverse_operator as mne_make_inverse_operator
 # from mne.beamformer import lcmv_raw
-from mne.beamformer import make_lcmv, apply_lcmv_raw
+# from mne.beamformer import make_lcmv, apply_lcmv_raw
+from mne.beamformer import apply_lcmv_raw
+from ..helpers.make_lcmv import make_lcmv
 
 from .node import ProcessorNode, Message
 from ..helpers.matrix_functions import (make_time_dimension_second,
@@ -30,10 +37,12 @@ from ..helpers.channels import (calculate_interpolation_matrix,
 from .. import TIME_AXIS
 from vendor.nfb.pynfb.signal_processing import filters
 
+import logging
+
 
 class Preprocessing(ProcessorNode):
 
-    def __init__(self, collect_for_x_seconds: int =60):
+    def __init__(self, collect_for_x_seconds: int=60):
         super().__init__()
         self.collect_for_x_seconds = collect_for_x_seconds  # type: int
 
@@ -56,7 +65,8 @@ class Preprocessing(ProcessorNode):
     CHANGES_IN_THESE_REQUIRE_RESET = ('collect_for_x_seconds', )
 
     def _initialize(self):
-        frequency = self.traverse_back_and_find('mne_info')['sfreq']
+        self.mne_info = self.traverse_back_and_find('mne_info')
+        frequency = self.mne_info['sfreq']
         self._samples_to_be_collected = int(math.ceil(
             self.collect_for_x_seconds * frequency))
 
@@ -86,11 +96,13 @@ class Preprocessing(ProcessorNode):
             standard_deviations = self._calculate_standard_deviations()
             self._bad_channel_indices = find_outliers(standard_deviations)
             if any(self._bad_channel_indices):
-                self._interpolation_matrix =\
-                        self._calculate_interpolation_matrix()
-                message = Message(there_has_been_a_change=True,
-                                  output_history_is_no_longer_valid=True)
-                self._deliver_a_message_to_receivers(message)
+                # self._interpolation_matrix =\
+                #         self._calculate_interpolation_matrix()
+                # message = Message(there_has_been_a_change=True,
+                #                   output_history_is_no_longer_valid=True)
+                # self._deliver_a_message_to_receivers(message)
+                # self.mne_info['bads'].append(self._bad_channel_indices)
+                pass
 
         self.output = self._interpolate(self.input_node.output)
 
@@ -376,7 +388,6 @@ class Beamformer(ProcessorNode):
 
         self._mne_info = mne_info
 
-
         # Optimization
         if not self._gain_matrix.flags['F_CONTIGUOUS']:
             self._gain_matrix = np.asfortranarray(self._gain_matrix)
@@ -411,30 +422,6 @@ class Beamformer(ProcessorNode):
                                       'fixed_orientation')
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
-    def _calculate_kernel(self, Rxx):
-        Rxx_inv = self._regularized_inverse(Rxx)
-
-        G = self._gain_matrix
-
-        if self.fixed_orientation is True:
-            denominators = 1 / apply_quad_form_to_columns(A=Rxx_inv, X=G)
-            return G.T.dot(Rxx_inv) * np.expand_dims(denominators, TIME_AXIS)
-
-        else:  # Free orientation
-            vertex_count = int(G.shape[1] / 3)
-            kernel = np.zeros(np.flipud(G.shape))
-            for idx in range(vertex_count):
-                vertex_slice = slice(idx * 3, idx * 3 + 3)
-                Gi = G[:, vertex_slice]
-                denominator = Gi.T.dot(Rxx_inv).dot(Gi)
-                kernel[vertex_slice, :] = np.linalg.inv(denominator).dot(Gi.T.dot(Rxx_inv))
-            return kernel
-
-    def _regularized_inverse(self, Rxx):
-        electrode_count = Rxx.shape[0]
-        _lambda = 1 / self.snr ** 2 * Rxx.trace() / electrode_count
-        return np.linalg.inv(Rxx + _lambda * np.eye(electrode_count))
-
     def _update(self):
 
         # input_array = get_a_subset_of_channels(self.input_node.output, self._channel_indices)
@@ -446,11 +433,16 @@ class Beamformer(ProcessorNode):
 
         if self.is_adaptive:
             self._update_covariance_matrix(input_array)
-            self._filters = make_lcmv(info=raw_array.info, forward=self.fwd_surf,
+            t1 = time.time()
+            self._filters = make_lcmv(info=self._mne_info, forward=self.fwd_surf,
                                       data_cov=self._Rxx, reg=0.5,
                                       pick_ori='max-power',
                                       weight_norm='unit-noise-gain',
                                       reduce_rank=False)
+            t2 = time.time()
+            self.logger.debug(
+                    'Assembled lcmv instance in {:.1f} ms'.format(
+                        (t2 - t1) * 1000))
 
         # stc = lcmv_raw(raw_array, self.fwd_surf, None, self._Rxx,
         #                pick_ori='max-power', weight_norm='unit-noise-gain',
@@ -506,8 +498,10 @@ class Beamformer(ProcessorNode):
                 raise ValueError('Beamformer can either be adaptive or not. This should be a boolean')
 
     def _update_covariance_matrix(self, input_array):
+        t1 = time.time()
         alpha = self._forgetting_factor_per_sample
         sample_count = input_array.shape[TIME_AXIS]
+        self.logger.debug('Number of samples: {}'.format(sample_count))
         new_Rxx_data = self._Rxx.data
 
         # input_array = self.input_node.output
@@ -517,13 +511,21 @@ class Beamformer(ProcessorNode):
         input_array_nobads = raw_array.get_data()
 
         # Exponential smoothing of XX'
-        for sample in make_time_dimension_second(input_array_nobads).T:
-            sample_2d = sample[:, np.newaxis]
+        # for sample in make_time_dimension_second(input_array_nobads).T:
+        #     sample_2d = sample[:, np.newaxis]
+        t2 = time.time()
+        self.logger.debug('Prepared covariance update in {:.2f} ms'.format((t2 - t1) * 1000))
+        samples = make_time_dimension_second(input_array_nobads).T
             # self._Rxx = alpha * self._Rxx + (1 - alpha) * sample_2d.dot(sample_2d.T)
-            new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * sample_2d.dot(sample_2d.T)
+            # new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * sample_2d.dot(sample_2d.T)
+        new_Rxx_data = alpha * new_Rxx_data + (1 - alpha) * samples.T.dot(samples)
+        t3 = time.time()
+        self.logger.debug('Updated matrix data in {:.2f} ms'.format((t3 - t2) * 1000))
         # self._Rxx.data = new_Rxx_data
         ch_names = np.array(self._mne_info['ch_names'])[mne.pick_types(self._mne_info, eeg=True, meg=False, exclude='bads')]
         self._Rxx = mne.Covariance(new_Rxx_data, ch_names, raw_array.info['bads'], raw_array.info['projs'], nfree=1)
+        t4 = time.time()
+        self.logger.debug('Created instance of covariance in {:.2f} ms'.format((t4 - t4) * 1000))
 
 # TODO: implement this function
 def pynfb_filter_based_processor_class(pynfb_filter_class):
@@ -666,15 +668,15 @@ class MCE(ProcessorNode):
         stc_slice = apply_inverse_raw(raw_slice, self.mne_inv,
                                       pick_ori='vector',
                                       method='MNE', lambda2=1)
-        # print(stc_slice.shape)
         Q = normalize(stc_slice.data[:, :, 0])  # dipole orientations
-        QQ = block_diag(*Q).T                   # matrix with dipole orientats
         # ------------------------------------------------------------------- #
 
         # -------- setup linprog params -------- #
-        A_eq = self.A_non_ori @ QQ
-        # data_slice = raw_c.get_data()[:, slice_ind]
-        data_slice = raw_slice.get_data()[:,0]
+        n_sen = self.A_non_ori.shape[0]
+        A_eq = np.empty([n_sen, n_src])
+        for i in range(n_src):
+            A_eq[:, i] = self.A_non_ori[:, i * 3: (i + 1) * 3] @ Q[i,:].T
+        data_slice = raw_slice.get_data()[:, 0]
         b_eq = self.Un.T @ data_slice
         c = np.ones(A_eq.shape[1])
         # -------------------------------------- #
@@ -685,4 +687,109 @@ class MCE(ProcessorNode):
         output_mce[:,-1] = sol.x
         self.output = output_mce
         self.sol = sol
-        return Q, QQ, A_eq, data_slice, b_eq, c
+        return Q, A_eq, data_slice, b_eq, c
+
+
+
+class ICARejection(ProcessorNode):
+
+    def __init__(self, collect_for_x_seconds: int=60):
+        super().__init__()
+        self.collect_for_x_seconds = collect_for_x_seconds  # type: int
+
+        self._samples_collected = None  # type: int
+        self._samples_to_be_collected = None  # type: int
+        self._enough_collected = None  # type: bool
+
+        self._reset_statistics()
+        self._ica_rejector = None
+
+    def _on_input_history_invalidation(self):
+        self._reset_statistics()
+
+    def _check_value(self, key, value):
+        pass
+
+    CHANGES_IN_THESE_REQUIRE_RESET = ('collect_for_x_seconds', )
+
+    def _initialize(self):
+        self._mne_info = self.traverse_back_and_find('mne_info')
+        self._frequency = self._mne_info['sfreq']
+        self._good_ch_inds = mne.pick_types(self._mne_info, eeg=True,
+                                            meg=False, stim=False,
+                                            exclude='bads')
+
+        channels = self._mne_info['chs']
+        self._ch_locs = np.array([ch['loc'] for ch in channels])
+
+        n_ch = len(self._good_ch_inds)
+        self._samples_to_be_collected = int(math.ceil(
+            self.collect_for_x_seconds * self._frequency))
+        self._collected_timeseries = np.zeros(
+                [n_ch, self._samples_to_be_collected])
+        self._linear_filter = filters.ButterFilter(
+                [1,200], fs=self._frequency,
+                n_channels=len(self._good_ch_inds))
+        self._linear_filter.apply = pynfb_ndarray_function_wrapper(
+                self._linear_filter.apply)
+
+
+    def _reset(self) -> bool:
+        self._reset_statistics()
+        self._input_history_is_no_longer_valid = True
+        return self._input_history_is_no_longer_valid
+
+    def _reset_statistics(self):
+        self._samples_collected = 0
+        self._enough_collected = False
+
+    def _update(self):
+        # Have we collected enough samples without the new input?
+        self.output = self.input_node.output
+        
+        enough_collected = self._samples_collected >=\
+                self._samples_to_be_collected
+        if not enough_collected:
+            if self.input_node.output is not None and\
+                    self.input_node.output.shape[TIME_AXIS] > 0:
+                self._update_statistics()
+
+        elif not self._enough_collected:  # We just got enough samples
+            self._enough_collected = True
+            print('COLLECTED ENOUGH SAMPLES')
+            # new_win = QApplication([])
+            ica = ICADialog(
+                    self._collected_timeseries.T,
+                    list(np.array(self._mne_info['ch_names'])[self._good_ch_inds]),
+                    self._ch_locs[self._good_ch_inds,:],
+                    self._frequency
+                  )
+
+            ica.exec_()
+            self._ica_rejector = ica.rejection.val.T
+        else:
+            self.output[self._good_ch_inds, :] = np.dot(
+                    self._ica_rejector,
+                    self.input_node.output[self._good_ch_inds, :])
+
+
+
+    def _update_statistics(self):
+        input_array = self.input_node.output.astype(np.dtype('float64'))
+        n = self._samples_collected
+        # print(n)
+        m = input_array.shape[TIME_AXIS]  # number of new samples
+        # print(m)
+        # print(self._collected_timeseries.shape)
+        self._samples_collected += m
+        self._collected_timeseries[:,n:n + m] = self._linear_filter.apply(
+                input_array[self._good_ch_inds,:])
+        # self._collected_timeseries[:,]
+        # Using float64 is necessary because otherwise rounding error
+        # in recursive formula accumulate
+        pass
+
+
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
+    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
+

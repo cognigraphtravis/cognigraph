@@ -7,6 +7,8 @@ import mne
 from mne.minimum_norm import make_inverse_operator, apply_inverse_raw
 from mne import make_forward_solution
 from mne.beamformer import lcmv_raw
+from mne.beamformer import  apply_lcmv_raw
+# from make_lcmv_cython import make_lcmv
 from mne import pick_types
 from mne.viz import plot_alignment
 from mne.viz import plot_topomap
@@ -14,6 +16,10 @@ from mne.io import read_raw_brainvision as Raw
 from mne.channels import Montage
 from os.path import splitext
 from scipy.io import loadmat
+
+import sys
+sys.path.append('/home/dmalt/Code/python/cogni_submodules/')
+from cognigraph.helpers.make_lcmv import make_lcmv
 
 data_path = '/home/dmalt/Data/cognigraph/data'
 subjects_dir = '/home/dmalt/mne_data/MNE-sample-data/subjects'
@@ -110,7 +116,7 @@ raw.pick_types(eeg=True, stim=False)
 #                             meg=False, eeg=True, mindist=5.0, n_jobs=2)
 
 # mne.write_forward_solution('dmalt_custom_lr-fwd.fif', fwd)
-fwd = mne.read_forward_solution('dmalt_custom_lr-fwd.fif')
+fwd = mne.read_forward_solution('./tests/data/dmalt_custom_mr-fwd.fif')
 
 print(fwd)
 leadfield = fwd['sol']['data']
@@ -149,15 +155,24 @@ raw_c.filter(l_freq = 8, h_freq=12)
 raw_c.set_eeg_reference(ref_channels='average')
 raw_c.apply_proj()
 # stc = apply_inverse_raw(raw_c, inverse_operator, pick_ori='vector', method=inv_method, lambda2=lambda2, start=start, stop=stop)
-stc = apply_inverse_raw(raw_c, inverse_operator,  method=inv_method, lambda2=lambda2, start=start, stop=stop)
+# stc = apply_inverse_raw(raw_c, inverse_operator,  method=inv_method, lambda2=lambda2, start=start, stop=stop)
 # raw.set_reference_channels
-stc
-#   {{{beamformer #
-# fwd_fix = mne.convert_forward_solution(fwd, surf_ori=True,  force_fixed=False)
-# data_cov = mne.compute_raw_covariance(raw_c, tmin=0, tmax=5, method='shrunk')
+# stc
+#  {{{beamformer #
+fwd_fix = mne.convert_forward_solution(fwd, surf_ori=True,  force_fixed=False)
+data_cov = mne.compute_raw_covariance(raw_c, tmin=0, tmax=5, method='shrunk')
+import time
+t1 = time.time()
 # stc = lcmv_raw(raw_c, fwd_fix, None, data_cov, reg=0.05, start=start, stop=stop,
 #                pick_ori='max-power', weight_norm='unit_noise_gain', max_ori_out='signed')
-               # weight_norm=None, max_ori_out='signed')
+filters = make_lcmv(info=raw_c.info, forward=fwd_fix, data_cov=data_cov,
+                    reg=0.5, pick_ori='max-power',
+                    weight_norm='unit-noise-gain', reduce_rank=False)
+t2 = time.time()
+print('{:.2f}'.format((t2 - t1) * 1000))
+# stc = apply_lcmv_raw(raw=raw_c, filters=filters, max_ori_out='abs')
+t3 = time.time()
+print('{:.2f}'.format((t3 - t2) * 1000))
 
 #  beamformer}}} #
 
@@ -182,13 +197,13 @@ stc
 # hilb = np.abs(hilb)
 # stc_hilb.data = hilb
 
-stc_smooth = stc.copy()
-factor = 0.99
-a = [1, -factor]
-b = [1 - factor]
+# stc_smooth = stc.copy()
+# factor = 0.99
+# a = [1, -factor]
+# b = [1 - factor]
 
-smooth = lfilter(b, a, np.abs(stc.data), axis=1)
-stc_smooth.data =  smooth
+# smooth = lfilter(b, a, np.abs(stc.data), axis=1)
+# stc_smooth.data =  smooth
 
 # stc_hilb_cogni = stc.copy()
 # hilb_cogni = hilbert(src_cogni)
@@ -207,9 +222,9 @@ stc_smooth.data =  smooth
 # stc.plot(hemi='rh', subjects_dir=subjects_dir,
 #              initial_time=0.21, time_unit='s', time_viewer=True)
 
-stc_smooth.plot(hemi='split', initial_time=0, time_viewer=True,
-        # clim=dict(kind='value', lims =[1.e-8, 1.5e-8, 2e-8]),
-                subjects_dir=subjects_dir, transparent=True,  colormap='bwr')
+# stc_smooth.plot(hemi='split', initial_time=0, time_viewer=True,
+#         # clim=dict(kind='value', lims =[1.e-8, 1.5e-8, 2e-8]),
+#                 subjects_dir=subjects_dir, transparent=True,  colormap='bwr')
 
 # stc_hilb_cogni.plot(hemi='both', initial_time=82, subjects_dir=subjects_dir, time_viewer=True, transparent=True, colormap='bwr')
 #  plot src data}}} #

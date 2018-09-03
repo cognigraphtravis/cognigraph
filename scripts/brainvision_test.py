@@ -1,6 +1,6 @@
 %gui qt
 
-from pyqtgraph import QtCore
+from PyQt5 import QtCore
 
 from cognigraph.pipeline import Pipeline
 from cognigraph.nodes import sources, processors, outputs

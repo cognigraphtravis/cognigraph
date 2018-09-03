@@ -1,14 +1,19 @@
 """Integration test to check mce performance"""
-
+import time
 import sys
 import os.path as op
 
 from pyqtgraph import QtCore, QtGui
+import pyqtgraph
 
+pyqtgraph.setConfigOption('useOpenGL', True)
+
+from cognigraph.helpers.brainvision import read_fif_data
 from cognigraph.pipeline import Pipeline
 from cognigraph.nodes import sources, processors, outputs
 from cognigraph import TIME_AXIS
 from cognigraph.gui.window import GUIWindow
+import logging
 
 app = QtGui.QApplication(sys.argv)
 
@@ -19,7 +24,7 @@ test_data_path = cur_dir + '/tests/data/'
 print(test_data_path)
 sim_data_fname = 'raw_sim.fif'
 # sim_data_fname = 'Koleno.fif'
-fwd_fname = 'dmalt_custom_lr-fwd.fif'
+fwd_fname = 'dmalt_custom_mr-fwd.fif'
 
 surf_dir = '/home/dmalt/mne_data/MNE-sample-data/subjects/sample/surf'
 
@@ -27,6 +32,8 @@ fwd_path = op.join(test_data_path, fwd_fname)
 sim_data_path = op.join(test_data_path, sim_data_fname)
 
 source = sources.FifSource(file_path=sim_data_path)
+source.MAX_SAMPLES_IN_CHUNK = 10000
+source.loop_the_file = True
 pipeline.source = source
 
 # Processors
@@ -38,7 +45,7 @@ pipeline.add_processor(linear_filter)
 
 beamformer = processors.Beamformer(forward_model_path=fwd_path,
                                    is_adaptive=True, output_type='activation',
-                                   forgetting_factor_per_second=0.99)
+                                   forgetting_factor_per_second=0.95)
 pipeline.add_processor(beamformer)
 
 
@@ -79,36 +86,92 @@ envelope_controls = processors_controls.children()[2]
 
 three_dee_brain_controls = outputs_controls.children()[0]
 three_dee_brain_controls.limits_mode_combo.setValue('Global')
-three_dee_brain_controls.threshold_slider.setValue(70)
+three_dee_brain_controls.threshold_slider.setValue(45)
 # three_dee_brain_controls.limits_mode_combo.setValue('Local')
 
 window.initialize()
 
+# start_s, stop_s = 80, 100
+# with source.not_triggering_reset():
+#     source.data, _ = read_fif_data(sim_data_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 
 def run():
+    logging.debug('Start iteration')
     pipeline.update_all_nodes()
+    logging.debug('End iteration')
     # pass
     # print(pipeline.source._samples_already_read / 500)
 
+class AsyncUpdater(QtCore.QRunnable):
+    _stop_flag = False
+    
+    def __init__(self):
+        super(AsyncUpdater, self).__init__()
+        self.setAutoDelete(False)
 
-timer = QtCore.QTimer()
-timer.timeout.connect(run)
-frequency = pipeline.frequency
-output_frequency = 10
-# timer.setInterval(1000. / frequency * 10)
-timer.setInterval(1000. / output_frequency)
+    def run(self):
+        self._stop_flag = False
+        
+        while self._stop_flag == False:
+            start = time.time()
+            pipeline.update_all_nodes()
+            end = time.time()
+            
+            # Force sleep to update at 10Hz
+            if end - start < 0.1:
+                time.sleep(0.1 - (end - start))
+        
+    def stop(self):
+        self._stop_flag = True
 
-source.loop_the_file = False
-# source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
-source.MAX_SAMPLES_IN_CHUNK = 10000
-# source.MAX_SAMPLES_IN_CHUNK = 5
-# envelope.disabled = True
+pool = QtCore.QThreadPool.globalInstance()
+updater = AsyncUpdater()
+is_paused = True
+
+def toggle_updater():
+    global pool
+    global updater
+    global is_paused
+    
+    if is_paused == True:
+        is_paused = False
+        pool.start(updater)
+    else:
+        is_paused = True
+        updater.stop()
+        pool.waitForDone()
+        
+window.control_button.clicked.connect(toggle_updater)
+
+# Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
+import numpy as np
+np.warnings.filterwarnings('ignore')
+
+# Show window and exit on close
+window.show()
+updater.stop()
+pool.waitForDone()
+sys.exit(app.exec_())
+
+# timer = QtCore.QTimer()
+# timer.timeout.connect(run)
+# frequency = pipeline.frequency
+# output_frequency = 1000
+# # timer.setInterval(1000. / frequency * 10)
+# # timer.setInterval(1000. / output_frequency)
+# timer.setInterval(0)
+
+# source.loop_the_file = True
+# # source.MAX_SAMPLES_IN_CHUNK = int(frequency / output_frequency)
+# source.MAX_SAMPLES_IN_CHUNK = 10000
+# # source.MAX_SAMPLES_IN_CHUNK = 5
+# # envelope.disabled = True
 
 
-if __name__ == '__main__':
-    import sys
+# if __name__ == '__main__':
+#     import sys
 
-    timer.start()
+#     timer.start()
     # while True:
     #     pipeline.update_all_nodes()
     # timer.start()

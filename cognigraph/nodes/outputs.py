@@ -1,5 +1,8 @@
 import os
+import time
 from types import SimpleNamespace
+
+from PyQt5.QtCore import pyqtSignal, QObject
 
 import mne
 import nibabel as nib
@@ -87,10 +90,11 @@ class ThreeDeeBrain(OutputNode):
     )
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
-    LIMITS_MODES = SimpleNamespace(GLOBAL='Global', LOCAL='Local', MANUAL='Manual')
+    LIMITS_MODES = SimpleNamespace(GLOBAL='Global', LOCAL='Local',
+                                   MANUAL='Manual')
 
-    def __init__(self, take_abs=True, limits_mode=LIMITS_MODES.LOCAL, buffer_length=1, threshold_pct=50,
-                 **brain_painter_kwargs):
+    def __init__(self, take_abs=True, limits_mode=LIMITS_MODES.LOCAL,
+                 buffer_length=1, threshold_pct=50, **brain_painter_kwargs):
         super().__init__()
 
         self.limits_mode = limits_mode
@@ -101,7 +105,8 @@ class ThreeDeeBrain(OutputNode):
         self._threshold_pct = threshold_pct
 
         self._limits_buffer = None  # type: RingBuffer
-        self._brain_painter = BrainPainter(threshold_pct=threshold_pct, **brain_painter_kwargs)
+        self._brain_painter = BrainPainter(threshold_pct=threshold_pct,
+                                           **brain_painter_kwargs)
 
     @property
     def threshold_pct(self):
@@ -158,22 +163,33 @@ class ThreeDeeBrain(OutputNode):
         if self._brain_painter.widget is not None:
             return self._brain_painter.widget
         else:
-            raise AttributeError('{} does not have widget yet. Probably has not been initialized')
+            raise AttributeError('{} does not have widget yet.' +
+                                 'Probably has not been initialized')
 
 
-class BrainPainter(object):
+class BrainPainter(QObject):
+    draw_sig = pyqtSignal('PyQt_PyObject')
+    time_since_draw = time.time()
+
     def __init__(self, threshold_pct=50,
                  brain_colormap: matplotlib_Colormap = cm.Greys,
                  data_colormap: matplotlib_Colormap = cm.Reds,
                  show_curvature=True, surfaces_dir=None):
         """
-        This is the last step. Object of this class draws whatever data are given to it on the cortex mesh. No changes,
-        except for thresholding, are made.
+        This is the last step.
+        Object of this class draws any data on the cortex mesh given to it.
+        No changes, except for thresholding, are made.
 
-        :param threshold_pct: Only values exceeding this percentage threshold will be shown
-        :param show_curvature: If True, concave areas will be shown in darker grey, convex - in lighter
-        :param surfaces_dir: Path to the Fressurfer surf directory. If None, mne's sample's surfaces will be used.
+        :param threshold_pct:
+        Only values exceeding this percentage threshold will be shown
+        :param show_curvature:
+        If True, concave areas will be shown in darker grey,
+        convex - in lighter
+        :param surfaces_dir:
+        Path to the Fressurfer surf directory.
+        If None, mne's sample's surfaces will be used.
         """
+        super().__init__()
 
         self.threshold_pct = threshold_pct
         self.show_curvature = show_curvature
@@ -189,10 +205,15 @@ class BrainPainter(object):
         self.background_colors = None  # type: np.ndarray  # N x 4
         self.mesh_item = None  # type: gl.GLMeshItem
 
+        self.draw_sig.connect(self.on_draw)
+
     def initialize(self, mne_forward_model_file_path):
-        self.surfaces_dir = self.surfaces_dir or self._guess_surfaces_dir_based_on(mne_forward_model_file_path)
+        self.surfaces_dir = (
+            self.surfaces_dir or
+            self._guess_surfaces_dir_based_on(mne_forward_model_file_path))
         self.mesh_data = self._get_mesh_data_from_surfaces_dir()
-        self.smoothing_matrix = self._get_smoothing_matrix(mne_forward_model_file_path)
+        self.smoothing_matrix = self._get_smoothing_matrix(
+            mne_forward_model_file_path)
 
         if self.widget is None:
             self.widget = self._create_widget()
@@ -200,23 +221,33 @@ class BrainPainter(object):
             for item in self.widget.items:
                 self.widget.removeItem(item)
 
-        self.background_colors = self._calculate_background_colors(self.show_curvature)
+        self.background_colors = self._calculate_background_colors(
+            self.show_curvature)
         self.mesh_data.setVertexColors(self.background_colors)
-        self.mesh_item = gl.GLMeshItem(meshdata=self.mesh_data, shader='shaded')
+        self.mesh_item = gl.GLMeshItem(
+            meshdata=self.mesh_data, shader='shaded')
         self.widget.addItem(self.mesh_item)
 
+    def on_draw(self, normalized_values):
+        now = time.time()
+
+        if (now - self.time_since_draw) >= 0.1:  # Redraw only at 10Hz
+            self.time_since_draw = now
+
+            sources_smoothed = self.smoothing_matrix.dot(normalized_values)
+            colors = self.data_colormap(sources_smoothed)
+
+            threshold = self.threshold_pct / 100
+            invisible_mask = sources_smoothed <= threshold
+            colors[invisible_mask] = self.background_colors[invisible_mask]
+            colors[~invisible_mask] *= self.background_colors[~invisible_mask,
+                                                              0, np.newaxis]
+
+            self.mesh_data.setVertexColors(colors)
+            self.mesh_item.meshDataChanged()
+
     def draw(self, normalized_values):
-
-        sources_smoothed = self.smoothing_matrix.dot(normalized_values)
-        colors = self.data_colormap(sources_smoothed)
-
-        threshold = self.threshold_pct / 100
-        invisible_mask = sources_smoothed <= threshold
-        colors[invisible_mask] = self.background_colors[invisible_mask]
-        colors[~invisible_mask] *= self.background_colors[~invisible_mask, 0, np.newaxis]
-
-        self.mesh_data.setVertexColors(colors)
-        self.mesh_item.meshDataChanged()
+        self.draw_sig.emit(normalized_values)
 
     def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:
         if self.surfaces_dir:
