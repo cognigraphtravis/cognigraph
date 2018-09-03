@@ -17,7 +17,7 @@ from mne.minimum_norm import apply_inverse_raw  # , make_inverse_operator
 from mne.minimum_norm import make_inverse_operator as mne_make_inverse_operator
 # from mne.beamformer import lcmv_raw
 # from mne.beamformer import make_lcmv, apply_lcmv_raw
-from mne.beamformer import  apply_lcmv_raw
+from mne.beamformer import apply_lcmv_raw
 from ..helpers.make_lcmv import make_lcmv
 
 from .node import ProcessorNode, Message

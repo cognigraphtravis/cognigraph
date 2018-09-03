@@ -12,46 +12,48 @@ class GUIWindow(QtGui.QMainWindow):
         self._pipeline = pipeline  # type: Pipeline
         self._controls = Controls(pipeline=self._pipeline)
         self._controls_widget = self._controls.widget
-        
-        #Start button and timer
+
+        # Start button and timer
         self.control_button = QtGui.QPushButton("Start")
         self.control_button.clicked.connect(self._toggle_button)
 
-        self.resize(QtCore.QSize(QtGui.QDesktopWidget().availableGeometry().width() * 0.9, 
-                                 QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
-                    
+        self.resize(QtCore.QSize(
+            QtGui.QDesktopWidget().availableGeometry().width() * 0.9,
+            QtGui.QDesktopWidget().availableGeometry().height() * 0.9))
+
     def init_ui(self):
         self._controls.initialize()
 
         central_widget = QtGui.QSplitter()
         self.setCentralWidget(central_widget)
-        
+
         # Build the controls portion of the window
         controls_layout = QtGui.QVBoxLayout()
         controls_layout.addWidget(self._controls_widget)
 
         controls_layout.addWidget(self.control_button)
         self._controls_widget.setMinimumWidth(400)
-        
-        # Add control portion to the main widget      
+
+        # Add control portion to the main widget
         controls_layout_wrapper = QtGui.QWidget()
         controls_layout_wrapper.setLayout(controls_layout)
-        self.centralWidget().addWidget(controls_layout_wrapper)      
+        self.centralWidget().addWidget(controls_layout_wrapper)
 
     def initialize(self):
         self._pipeline.initialize_all_nodes()
         for node_widget in self._node_widgets:
             node_widget.setMinimumWidth(600)
-            
+
             # insert widget at before-the-end pos (just before controls widget)
-            self.centralWidget().insertWidget(self.centralWidget().count()-1, node_widget)
+            self.centralWidget().insertWidget(self.centralWidget().count() - 1,
+                                              node_widget)
 
     def _toggle_button(self):
         if self.control_button.text() == "Pause":
             self.control_button.setText("Start")
         else:
-            self.control_button.setText("Pause")            
-            
+            self.control_button.setText("Pause")
+
     @property
     def _node_widgets(self) -> List[QtGui.QWidget]:
         node_widgets = list()
