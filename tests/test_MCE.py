@@ -64,10 +64,8 @@ class TestMCE:
     def test_check_value(self):
         self.mce.snr = -1
         self.mce._check_value()
-        
 
 
     # def test_reset(self):
     #     self.mce._reset()
-        
 
