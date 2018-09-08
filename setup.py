@@ -3,12 +3,12 @@ from setuptools import setup
 
 setup(
     name='cognigraph',
-    version='0.1',
+    version='0.1.1',
     install_requires=[
         'pyqt5',
         'pyqtgraph',
-        'mne==0.15',
-        'scipy',
+        'mne<=0.15',
+        'scipy>=1.0.0',
         'matplotlib',
         'pylsl',
         'h5py',
