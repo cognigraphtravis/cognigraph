@@ -3,6 +3,8 @@ import time
 import sys
 import os.path as op
 
+import os
+os.environ['PYQTGRAPH_QT_LIB'] = 'PyQt5'
 from pyqtgraph import QtCore, QtGui
 import pyqtgraph
 
