@@ -120,6 +120,7 @@ class BrainvisionSource(SourceNode):
         if self._time_of_the_last_update is not None:
 
             seconds_since_last_update = current_time - self._time_of_the_last_update
+            self.logger.info('Last updated {} seconds ago'.format(seconds_since_last_update))
             self._time_of_the_last_update = current_time
             frequency = self.mne_info['sfreq']
 
