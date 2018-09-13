@@ -1,12 +1,14 @@
 import platform
 import time
 from PyQt5.QtCore import QTimer
+from vispy.gloo.util import _screenshot
+from PIL import Image as im
 
 # Import screenshoting software
-if platform.system() == 'Linux':
-    import pyscreenshot as ImageGrab  # ImageGrab replacement for Pillow
-else:
-    from PIL import ImageGrab
+# if platform.system() == 'Linux':
+#     import pyscreenshot as ImageGrab  # ImageGrab replacement for Pillow
+# else:
+#     from PIL import ImageGrab
 
 
 class ScreenRecorder:
@@ -34,7 +36,7 @@ class ScreenRecorder:
         self._timer.stop()
 
         duration = time.time() - self._start_time
-        self._display_time = (duration*1000)/len(self._images)
+        self._display_time = (duration * 1000) / len(self._images)
 
     def save(self, path):
         self._images[0].save(
@@ -46,6 +48,8 @@ class ScreenRecorder:
 
     def _append_screenshot(self):
         if self.sector is None:
-            self._images.append(ImageGrab.grab())
+            # self._images.append(ImageGrab.grab())
+            self._images.append(im.fromarray(_screenshot()))
         else:
-            self._images.append(ImageGrab.grab(bbox=self.sector))
+            # self._images.append(ImageGrab.grab(bbox=self.sector))
+            self._images.append(im.fromarray(_screenshot()))

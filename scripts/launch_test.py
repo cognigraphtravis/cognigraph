@@ -39,10 +39,10 @@ pipeline.add_processor(preprocessing)
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
 pipeline.add_processor(linear_filter)
 
-inverse_model = processors.InverseModel(method='dSPM', snr=3.0)
+inverse_model = processors.InverseModel(method='MNE', snr=1.0)
 pipeline.add_processor(inverse_model)
 
-envelope_extractor = processors.EnvelopeExtractor()
+envelope_extractor = processors.EnvelopeExtractor(0.99)
 pipeline.add_processor(envelope_extractor)
 
 # Outputs
