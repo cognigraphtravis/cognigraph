@@ -429,7 +429,7 @@ class Beamformer(ProcessorNode):
         raw_array = mne.io.RawArray(input_array, self._mne_info)
 
         raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
-        raw_array.set_eeg_reference(ref_channels='average')
+        raw_array.set_eeg_reference(ref_channels='average', projection=True)
 
         if self.is_adaptive:
             self._update_covariance_matrix(input_array)
@@ -507,7 +507,7 @@ class Beamformer(ProcessorNode):
         # input_array = self.input_node.output
         raw_array = mne.io.RawArray(input_array, self._mne_info)
         raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
-        raw_array.set_eeg_reference(ref_channels='average')
+        raw_array.set_eeg_reference(ref_channels='average', projection=True)
         input_array_nobads = raw_array.get_data()
 
         # Exponential smoothing of XX'
@@ -662,7 +662,7 @@ class MCE(ProcessorNode):
         raw_slice = mne.io.RawArray(
                 np.expand_dims(last_slice, axis=1), self.mne_info)
         raw_slice.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
-        raw_slice.set_eeg_reference(ref_channels='average')
+        raw_slice.set_eeg_reference(ref_channels='average', projection=True)
 
         # --------------------- get dipole orientations --------------------- #
         stc_slice = apply_inverse_raw(raw_slice, self.mne_inv,

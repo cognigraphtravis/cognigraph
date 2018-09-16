@@ -41,7 +41,8 @@ def matrix_from_inverse_operator(inverse_operator, mne_info, snr, method) -> np.
     dummy_raw = mne.io.RawArray(data=I, info=mne_info, verbose='ERROR')
     contains_eeg_channels = len(mne.pick_types(mne_info, meg=False, eeg=True)) > 0
     if contains_eeg_channels:
-        dummy_raw.set_eeg_reference(verbose='ERROR')
+        dummy_raw.set_eeg_reference(ref_channels='average',
+                                    verbose='ERROR', projection=True)
 
     # Applying inverse modelling to an identity matrix gives us the inverse model matrix
     lambda2 = 1.0 / snr ** 2
