@@ -25,7 +25,7 @@ from ..helpers.channels import read_channel_types, channel_labels_saver
 from vendor.nfb.pynfb.widgets.signal_viewers import RawSignalViewer as nfbSignalViewer
 
 # visbrain visualization imports 
-from visbrain.visuals import BrainMesh
+from ..gui.brain_visual import BrainMesh
 from vispy import app, gloo, visuals, scene, io
 
 class LSLStreamOutput(OutputNode):
