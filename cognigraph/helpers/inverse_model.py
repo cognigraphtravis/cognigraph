@@ -154,7 +154,8 @@ def make_inverse_operator(forward_model_file_path, mne_info, sigma2=1):
                                         verbose='ERROR')
 
     forward_goods = mne.pick_channels_forward(forward,
-                                              include=info_goods['ch_names'])
+                                              include=info_goods['ch_names'],
+                                              verbose='ERROR')
 
     G = forward_goods['sol']['data']
     N_SEN = G.shape[0]

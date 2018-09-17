@@ -78,7 +78,7 @@ def _prepare_beamformer_input(info, forward, label, picks, pick_ori):
     fwd_ch_names = forward['sol']['row_names']
     # Keep channels in forward present in info:
     fwd_ch_names = [ch for ch in fwd_ch_names if ch in info_ch_names]
-    forward = pick_channels_forward(forward, fwd_ch_names)
+    forward = pick_channels_forward(forward, fwd_ch_names, verbose='ERROR')
     picks_forward = [fwd_ch_names.index(ch) for ch in ch_names]
 
     # Get gain matrix (forward operator)
