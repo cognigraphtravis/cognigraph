@@ -2,6 +2,7 @@ import os
 import time
 from types import SimpleNamespace
 
+import tables
 from PyQt5.QtCore import pyqtSignal, QObject
 
 import mne
@@ -430,3 +431,41 @@ class SignalViewer(OutputNode):
     def __init__(self):
         super().__init__()
         self.widget = None  # type: nfbSignalViewer
+
+
+class FileOutput(OutputNode):
+
+    def _on_input_history_invalidation(self):
+        pass
+
+    def _check_value(self, key, value):
+        pass  # TODO: check that value as a string usable as a stream name
+
+    CHANGES_IN_THESE_REQUIRE_RESET = ('stream_name', )
+
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
+    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info':
+                                           lambda info: (info['sfreq'], ) +
+                                           channel_labels_saver(info)}
+
+    def _reset(self):
+        self._should_reinitialize = True
+        self.initialize()
+
+    def __init__(self, output_file='output.h5'):
+        super().__init__()
+        self.output_file = output_file
+
+    def _initialize(self):
+
+        info = self.traverse_back_and_find('mne_info')
+        col_size = info['nchan']
+        f = tables.open_file(self.output_file, mode='w')
+        atom = tables.Float64Atom()
+
+        self.output_array = f.create_earray(
+            f.root, 'data', atom, (col_size, 0))
+
+    def _update(self):
+        chunk = self.input_node.output
+        self.output_array.append(chunk)

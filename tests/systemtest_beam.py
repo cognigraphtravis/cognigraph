@@ -61,9 +61,11 @@ three_dee_brain = outputs.ThreeDeeBrain(
 pipeline.add_output(three_dee_brain)
 # pipeline.add_output(outputs.LSLStreamOutput())
 # pipeline.initialize_all_nodes()
+file_output = outputs.FileOutput()
 
 signal_viewer = outputs.SignalViewer()
 pipeline.add_output(signal_viewer, input_node=linear_filter)
+pipeline.add_output(file_output, input_node=beamformer)
 
 window = GUIWindow(pipeline=pipeline)
 window.init_ui()

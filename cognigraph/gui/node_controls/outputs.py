@@ -186,3 +186,11 @@ class SignalViewerControls(OutputNodeControls):
 
     def _create_parameters(self):
         pass
+
+
+class FileOutputControls(OutputNodeControls):
+    OUTPUT_CLASS = outputs.FileOutput
+    CONTROLS_LABEL = 'File Output'
+
+    def _create_parameters(self):
+        pass
