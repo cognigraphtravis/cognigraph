@@ -94,6 +94,9 @@ class Preprocessing(ProcessorNode):
                 #                   output_history_is_no_longer_valid=True)
                 # self._deliver_a_message_to_receivers(message)
                 # self.mne_info['bads'].append(self._bad_channel_indices)
+                # self.mne_info['bads'] = self._bad_channel_indices
+
+                # TODO: handle emergent bad channels on the go
                 pass
 
         self.output = self.input_node.output
@@ -173,8 +176,21 @@ class InverseModel(ProcessorNode):
         self._user_provided_forward_model_file_path = value
 
     def _update(self):
+        mne_info = self.traverse_back_and_find('mne_info')
+        bads = mne_info['bads']
+        if bads != self._bad_channels:
+            inverse_operator = make_inverse_operator(
+                self.mne_forward_model_file_path, mne_info)
+            self._inverse_model_matrix = matrix_from_inverse_operator(
+                inverse_operator=inverse_operator, mne_info=mne_info,
+                snr=self.snr, method=self.method)
+            self._bad_channels = bads
+
         input_array = self.input_node.output
-        self.output = self._apply_inverse_model_matrix(input_array)
+        raw_array = mne.io.RawArray(input_array, mne_info, verbose='ERROR')
+        raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
+        data = raw_array.get_data()
+        self.output = self._apply_inverse_model_matrix(data)
 
     def _apply_inverse_model_matrix(self, input_array: np.ndarray):
         W = self._inverse_model_matrix  # VERTICES x CHANNELS
@@ -183,6 +199,7 @@ class InverseModel(ProcessorNode):
 
     def _initialize(self):
         mne_info = self.traverse_back_and_find('mne_info')
+        self._bad_channels = mne_info['bads']
 
         if self._user_provided_forward_model_file_path is None:
             self._default_forward_model_file_path =\

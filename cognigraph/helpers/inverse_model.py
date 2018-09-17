@@ -46,18 +46,26 @@ def _pick_columns_from_matrix(matrix: np.ndarray, output_column_labels: list,
 def matrix_from_inverse_operator(
         inverse_operator, mne_info, snr, method) -> np.ndarray:
     # Create a dummy mne.Raw object
-    channel_count = mne_info['nchan']
-    I = np.identity(channel_count)
-    dummy_raw = mne.io.RawArray(data=I, info=mne_info, verbose='ERROR')
-    contains_eeg_channels = len(mne.pick_types(mne_info, meg=False, eeg=True)) > 0
+    picks = mne.pick_types(mne_info, eeg=True, meg=False, exclude='bads')
+    info_goods = mne.pick_info(mne_info, sel=picks)
+    channel_count = info_goods['nchan']
+    dummy_eye = np.identity(channel_count)
+
+    dummy_raw = mne.io.RawArray(
+        data=dummy_eye, info=info_goods, verbose='ERROR')
+
+    contains_eeg_channels = len(
+        mne.pick_types(mne_info, meg=False, eeg=True)) > 0
+
+
     if contains_eeg_channels:
         dummy_raw.set_eeg_reference(ref_channels='average',
                                     verbose='ERROR', projection=True)
 
-    # Applying inverse modelling to an identity matrix gives us the inverse model matrix
+    # Applying inverse operator to identity matrix gives inverse model matrix
     lambda2 = 1.0 / snr ** 2
-    stc = mne.minimum_norm.apply_inverse_raw(dummy_raw, inverse_operator, lambda2, method,
-                                             verbose='ERROR')
+    stc = mne.minimum_norm.apply_inverse_raw(dummy_raw, inverse_operator,
+                                             lambda2, method, verbose='ERROR')
 
     return stc.data
 
@@ -136,14 +144,26 @@ def assemble_gain_matrix(forward_model_path: str, mne_info: mne.Info,
 def make_inverse_operator(forward_model_file_path, mne_info, sigma2=1):
     # sigma2 is what will be used to scale the identity covariance matrix.
     # This will not affect MNE solution though.
-    # The inverse operator will use channels common to forward_model_file_path and mne_info.
-    forward = mne.read_forward_solution(forward_model_file_path, verbose='ERROR')
-    cov = mne.Covariance(data=sigma2 * np.identity(mne_info['nchan']),
-                         names=mne_info['ch_names'], bads=mne_info['bads'],
-                         projs=mne_info['projs'], nfree=1)
+    # The inverse operator will use channels common to
+    # forward_model_file_path and mne_info.
 
-    # return mne.minimum_norm.make_inverse_operator(mne_info, forward,
-    #                                               cov, depth=None, loose=0,
-    #                                               fixed=True, verbose='ERROR')
-    return mne.minimum_norm.make_inverse_operator(
-                mne_info, forward, cov, depth=0.8, loose=1, fixed=False)
+    picks = mne.pick_types(mne_info, eeg=True, meg=False, exclude='bads')
+    info_goods = mne.pick_info(mne_info, sel=picks)
+
+    forward = mne.read_forward_solution(forward_model_file_path,
+                                        verbose='ERROR')
+
+    forward_goods = mne.pick_channels_forward(forward,
+                                              include=info_goods['ch_names'])
+
+    G = forward_goods['sol']['data']
+    N_SEN = G.shape[0]
+    ch_names = info_goods['ch_names']
+    cov_data = np.identity(N_SEN)
+    cov = mne.Covariance(
+            cov_data, ch_names, mne_info['bads'],
+            mne_info['projs'], nfree=1)
+    inv = mne.minimum_norm.make_inverse_operator(info_goods, forward_goods,
+                                                 cov, depth=None, loose=0,
+                                                 fixed=True, verbose='ERROR')
+    return inv
