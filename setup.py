@@ -7,7 +7,7 @@ setup(
     install_requires=[
         'pyqtgraph',
         'pyqt5',
-        'mne<=0.15',
+        'mne',
         'scipy>=1.0.0',
         'matplotlib',
         'pylsl',

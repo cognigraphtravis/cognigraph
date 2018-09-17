@@ -5,20 +5,6 @@ import numpy as np
 from .. import MISC_CHANNEL_TYPE
 
 
-def calculate_interpolation_matrix(info: mne.Info):
-    """
-    Calculates a matrix that interpolates bad channels
-    :param info: mne.Info dict with names of channels to be interpolated under the 'bads' key
-    :return: matrix M such that M.dot(data) interpolates bad channels (assuming rows in data correspond to channels)
-    """
-    fill_eeg_channel_locations(info)
-    channel_count = info['nchan']
-    dummy_raw = mne.io.RawArray(data=np.identity(channel_count), info=info, verbose='ERROR')
-    dummy_raw.interpolate_bads(mode='fast')
-
-    return dummy_raw.get_data()
-
-
 def fill_eeg_channel_locations(info: mne.Info):
     """
     Add standard locations for EEG channels if none were provided. Operates in place.
