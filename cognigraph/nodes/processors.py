@@ -1,6 +1,6 @@
 import time
 
-from typing import Tuple, List
+from typing import Tuple
 import math
 
 from vendor.nfb.pynfb.protocols.ssd.topomap_selector_ica import ICADialog
@@ -778,9 +778,9 @@ class ICARejection(ProcessorNode):
             self._enough_collected = True
             print('COLLECTED ENOUGH SAMPLES')
             ica = ICADialog(
-                    self._ch_locs[self._good_ch_inds,:],
-                    self._frequency
-                  )
+                self._collected_timeseries.T,
+                list(np.array(self._mne_info['ch_names'])[self._good_ch_inds]),
+                self._ch_locs[self._good_ch_inds, :], self._frequency)
 
             ica.exec_()
             self._ica_rejector = ica.rejection.val.T
