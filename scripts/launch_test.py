@@ -70,19 +70,17 @@ window.initialize()
 
 # Симулируем работу препроцессинга по отлову шумных каналов
 
-# Set bad channels and calculate interpolation matrix manually
-bad_channel_labels = ['Fp2', 'F5', 'C5', 'F2', 'PPO10h', 'POO1', 'FCC2h']
-preprocessing._bad_channel_indices = mne.pick_channels(
-    source.mne_info['ch_names'], include=bad_channel_labels)
-preprocessing._samples_to_be_collected = 0
-preprocessing._enough_collected = True
+# Set bad channels manually
+# bad_channel_labels = ['Fp2', 'F5', 'C5', 'F2', 'PPO10h', 'POO1', 'FCC2h', 'VEOG']
+# preprocessing._bad_channel_indices = mne.pick_channels(
+#     source.mne_info['ch_names'], include=bad_channel_labels)
+# preprocessing.mne_info['bads'] = bad_channel_labels
+# # preprocessing._samples_to_be_collected = 0
+# preprocessing._enough_collected = True
 
-preprocessing._interpolation_matrix = (
-    preprocessing._calculate_interpolation_matrix())
-message = node.Message(there_has_been_a_change=True,
-                       output_history_is_no_longer_valid=True)
-preprocessing._deliver_a_message_to_receivers(message)
-
+# message = node.Message(there_has_been_a_change=True,
+#                        output_history_is_no_longer_valid=True)
+# preprocessing._deliver_a_message_to_receivers(message)
 
 # Обрезаем данные в диапазоне с приличной записью
 vhdr_file_path = os.path.splitext(source.file_path)[0] + '.vhdr'

@@ -96,7 +96,7 @@ class Preprocessing(ProcessorNode):
                 # self.mne_info['bads'].append(self._bad_channel_indices)
                 pass
 
-        self.output = self._interpolate(self.input_node.output)
+        self.output = self.input_node.output
 
     def _update_statistics(self):
         input_array = self.input_node.output.astype(np.dtype('float64'))
@@ -116,23 +116,6 @@ class Preprocessing(ProcessorNode):
         n = self._samples_collected
         return np.sqrt(
             n / (n - 1) * (self._mean_sums_of_squares - self._means ** 2))
-
-    def _calculate_interpolation_matrix(self):
-        mne_info = self.traverse_back_and_find('mne_info').copy()
-        mne_info['bads'] = [mne_info['ch_names'][i]
-                            for i in self._bad_channel_indices]
-        print('The following channels: {bads} '.format(bads=mne_info['bads']) +
-              'were marked as bad and will be interpolated')
-        return calculate_interpolation_matrix(mne_info)
-
-    def _interpolate(self, input_array: np.ndarray):
-        if input_array is None or self._interpolation_matrix is None:
-            return input_array
-        else:
-            if TIME_AXIS == 1:
-                return self._interpolation_matrix.dot(input_array)
-            elif TIME_AXIS == 0:
-                return self._interpolation_matrix.dot(input_array.T).T
 
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
@@ -347,7 +330,7 @@ class Beamformer(ProcessorNode):
         super().__init__()
 
         self.snr = snr  # type: float
-        self._user_provided_forward_model_file_path = forward_model_path  # type: str
+        self._user_provided_forward_model_file_path = forward_model_path
         self._default_forward_model_file_path = None  # type: str
         self.mne_info = None  # type: mne.Info
 
@@ -360,7 +343,7 @@ class Beamformer(ProcessorNode):
         self._channel_indices = None  # type: list
         self._gain_matrix = None  # type: np.ndarray
         self._Rxx = None  # type: np.ndarray
-        self.forgetting_factor_per_second = forgetting_factor_per_second  # type: float
+        self.forgetting_factor_per_second = forgetting_factor_per_second
         self._forgetting_factor_per_sample = None  # type: float
 
     @property
@@ -438,7 +421,7 @@ class Beamformer(ProcessorNode):
     def _update(self):
         input_array = self.input_node.output
         raw_array = mne.io.RawArray(
-        raw_array = mne.io.RawArray(input_array, self._mne_info)
+            input_array, self._mne_info, verbose='ERROR')
 
         raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
         raw_array.set_eeg_reference(ref_channels='average', projection=True)
@@ -681,7 +664,7 @@ class MCE(ProcessorNode):
         n_times = input_array.shape[1]
         output_mce = np.empty([n_src, n_times])
 
-        raw_slice = mne.io.RawArray(
+        raw_slice = mne.io.RawArray(np.expand_dims(last_slice, axis=1),
                                     self.mne_info, verbose='ERROR')
         raw_slice.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
         raw_slice.set_eeg_reference(ref_channels='average', projection=True)
@@ -777,7 +760,6 @@ class ICARejection(ProcessorNode):
         elif not self._enough_collected:  # We just got enough samples
             self._enough_collected = True
             print('COLLECTED ENOUGH SAMPLES')
-            # new_win = QApplication([])
             ica = ICADialog(
                     self._ch_locs[self._good_ch_inds,:],
                     self._frequency
