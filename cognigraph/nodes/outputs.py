@@ -16,12 +16,17 @@ from scipy import sparse
 from ..helpers.pysurfer.smoothing_matrix import smoothing_matrix as calculate_smoothing_matrix, mesh_edges
 from .node import OutputNode
 from .. import CHANNEL_AXIS, TIME_AXIS, PYNFB_TIME_AXIS
-from ..helpers.lsl import convert_numpy_format_to_lsl, convert_numpy_array_to_lsl_chunk, create_lsl_outlet
+from ..helpers.lsl import (convert_numpy_format_to_lsl,
+                           convert_numpy_array_to_lsl_chunk,
+                           create_lsl_outlet)
 from ..helpers.matrix_functions import last_sample, make_time_dimension_second
 from ..helpers.ring_buffer import RingBuffer
 from ..helpers.channels import read_channel_types, channel_labels_saver
 from vendor.nfb.pynfb.widgets.signal_viewers import RawSignalViewer as nfbSignalViewer
 
+# visbrain visualization imports 
+from ..gui.brain_visual import BrainMesh
+from vispy import app, gloo, visuals, scene, io
 
 class LSLStreamOutput(OutputNode):
 
@@ -118,7 +123,8 @@ class ThreeDeeBrain(OutputNode):
         self._brain_painter.threshold_pct = value
 
     def _initialize(self):
-        mne_forward_model_file_path = self.traverse_back_and_find('mne_forward_model_file_path')
+        mne_forward_model_file_path = self.traverse_back_and_find(
+            'mne_forward_model_file_path')
         self._brain_painter.initialize(mne_forward_model_file_path)
 
         frequency = self.traverse_back_and_find('mne_info')['sfreq']
@@ -141,8 +147,8 @@ class ThreeDeeBrain(OutputNode):
 
         if self.limits_mode == self.LIMITS_MODES.GLOBAL:
             mins, maxs = self._limits_buffer.data
-            self.colormap_limits.lower = np.percentile(mins, q = 5)
-            self.colormap_limits.upper = np.percentile(maxs, q = 95)
+            self.colormap_limits.lower = np.percentile(mins, q=5)
+            self.colormap_limits.upper = np.percentile(maxs, q=95)
         elif self.limits_mode == self.LIMITS_MODES.LOCAL:
             sources = last_sample(sources)
             self.colormap_limits.lower = np.min(sources)
@@ -215,41 +221,47 @@ class BrainPainter(QObject):
         self.smoothing_matrix = self._get_smoothing_matrix(
             mne_forward_model_file_path)
 
+
+        self.background_colors = self._calculate_background_colors(
+            self.show_curvature)
+        # self.mesh_data.setVertexColors(self.background_colors)
+        # import ipdb; ipdb.set_trace()
+        # self.mesh_data.add_overlay(self.background_colors, to_overlay=1)
+        # self.mesh_item = gl.GLMeshItem(
+        #     meshdata=self.mesh_data, shader='shaded')
+        # self.widget.addItem(self.mesh_item)
         if self.widget is None:
             self.widget = self._create_widget()
         else:  # Do not recreate the widget, just clear it
             for item in self.widget.items:
                 self.widget.removeItem(item)
 
-        self.background_colors = self._calculate_background_colors(
-            self.show_curvature)
-        self.mesh_data.setVertexColors(self.background_colors)
-        self.mesh_item = gl.GLMeshItem(
-            meshdata=self.mesh_data, shader='shaded')
-        self.widget.addItem(self.mesh_item)
-
     def on_draw(self, normalized_values):
         now = time.time()
 
-        if (now - self.time_since_draw) >= 0.1:  # Redraw only at 10Hz
-            self.time_since_draw = now
+        # if (now - self.time_since_draw) >= 0.01:  # Redraw only at 10Hz
+        self.time_since_draw = now
 
-            sources_smoothed = self.smoothing_matrix.dot(normalized_values)
-            colors = self.data_colormap(sources_smoothed)
+        sources_smoothed = self.smoothing_matrix.dot(normalized_values)
+        colors = self.data_colormap(sources_smoothed)
+        threshold = self.threshold_pct / 100
+        mask = sources_smoothed <= threshold
+        colors[mask] = self.background_colors[mask]
+        colors[~mask] *= self.background_colors[~mask, 0, np.newaxis]
 
-            threshold = self.threshold_pct / 100
-            invisible_mask = sources_smoothed <= threshold
-            colors[invisible_mask] = self.background_colors[invisible_mask]
-            colors[~invisible_mask] *= self.background_colors[~invisible_mask,
-                                                              0, np.newaxis]
-
-            self.mesh_data.setVertexColors(colors)
-            self.mesh_item.meshDataChanged()
+        # self.mesh_data.setVertexColors(colors)
+        self.mesh_data._alphas[:, :] = 0.  # reset colors to white
+        self.mesh_data._alphas_buffer.set_data(self.mesh_data._alphas)
+        if np.any(~mask):
+            self.mesh_data.add_overlay(
+                sources_smoothed[~mask], vertices=np.where(~mask)[0], to_overlay=1)
+        self.mesh_data.update()
+            # self.mesh_item.meshDataChanged()
 
     def draw(self, normalized_values):
         self.draw_sig.emit(normalized_values)
 
-    def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:
+    def _get_mesh_data_from_surfaces_dir(self, cortex_type='pial') -> gl.MeshData:
         surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
                       for h in ('lh', 'rh')]
         lh_mesh, rh_mesh = [nib.freesurfer.read_geometry(surf_path) for surf_path in surf_paths]
@@ -270,8 +282,9 @@ class BrainPainter(QObject):
 
         # Invert vertex normals for more reasonable lighting (I am not sure if the pyqtgraph's shader has a bug or
         # gl.MeshData's calculation of normals does
-        mesh_data = gl.MeshData(vertexes=vertexes, faces=faces)
-        mesh_data._vertexNormals = mesh_data.vertexNormals() * (-1)
+        # mesh_data = gl.MeshData(vertexes=vertexes, faces=faces)
+        mesh_data = BrainMesh(vertices=vertexes, faces=faces)
+        # mesh_data._vertexNormals = mesh_data.vertexNormals() * (-1)
 
         return mesh_data
 
@@ -300,11 +313,28 @@ class BrainPainter(QObject):
         return sources_idx, gl.MeshData(vertexes=vertexes, faces=faces)
 
     def _create_widget(self):
-        widget = gl.GLViewWidget()
-        # Set the camera at a distance proportional to the size of the mesh along the widest dimension
-        max_ptp = max(np.ptp(self.mesh_data.vertexes(), axis=0))
-        widget.setCameraPosition(distance=(1.5 * max_ptp))
-        return widget
+        # TODO: change to vispy
+        # widget = gl.GLViewWidget()
+        canvas = scene.SceneCanvas(keys='interactive', show=False)
+
+        # Add a ViewBox to let the user zoom/rotate
+        view = canvas.central_widget.add_view()
+        view.camera = 'turntable'
+        view.camera.fov = 50
+        view.camera.distance = 400
+
+        # Make light follow camera
+        @canvas.events.mouse_move.connect
+        def on_mouse_move(event):
+            self.mesh_data._camera = view.camera
+            self.mesh_data.shared_program.frag['camtf'] = self.mesh_data._camera.transform
+            self.mesh_data.update()
+            view.add(self.mesh_data)
+        # # Set the camera at a distance proportional to the size of the mesh along the widest dimension
+        # max_ptp = max(np.ptp(self.mesh_data.vertexes(), axis=0))
+        # widget.setCameraPosition(distance=(1.5 * max_ptp))
+        return canvas.native
+
 
     def _calculate_background_colors(self, show_curvature):
         if show_curvature:
@@ -342,12 +372,19 @@ class BrainPainter(QObject):
         return smooth_mat_lh.tocsc() + smooth_mat_rh.tocsc()
 
     def _get_smoothing_matrix(self, mne_forward_model_file_path):
-        """Creates or loads a smoothing matrix that lets us interpolate source values onto all mesh vertices"""
-        # Not all the vertices in the forward solution mesh are sources. sources_idx actually indexes into the union of
-        # high-definition meshes for left and right hemispheres. The smoothing matrix then lets us assign a color to
-        # each vertex. If in future we decide to use low-definition mesh from the forward model for drawing, we should
-        # index into that.
-        # Shorter: the coordinates of the jth source are in self.mesh_data.vertexes()[sources_idx[j], :]
+        """
+        Creates or loads a smoothing matrix that lets us
+        interpolate source values onto all mesh vertices
+
+        """
+        # Not all the vertices in the forward solution mesh are sources.
+        # sources_idx actually indexes into the union of
+        # high-definition meshes for left and right hemispheres.
+        # The smoothing matrix then lets us assign a color to each vertex.
+        # If in future we decide to use low-definition mesh from
+        # the forward model for drawing, we should index into that.
+        # Shorter: the coordinates of the jth source are
+        # in self.mesh_data.vertexes()[sources_idx[j], :]
         smoothing_matrix_file_path = os.path.splitext(mne_forward_model_file_path)[0] + '-smoothing-matrix.npz'
         try:
             return sparse.load_npz(smoothing_matrix_file_path)
