@@ -261,7 +261,7 @@ class BrainPainter(QObject):
     def draw(self, normalized_values):
         self.draw_sig.emit(normalized_values)
 
-    def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:
+    def _get_mesh_data_from_surfaces_dir(self, cortex_type='pial') -> gl.MeshData:
         surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
                       for h in ('lh', 'rh')]
         lh_mesh, rh_mesh = [nib.freesurfer.read_geometry(surf_path) for surf_path in surf_paths]
