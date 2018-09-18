@@ -1,24 +1,26 @@
 ﻿import sys
 import time
 
+
 from PyQt5 import QtCore, QtGui
 import mne
-import os
 import os.path as op
 
-from cognigraph.helpers.brainvision import read_brain_vision_data
 from cognigraph.pipeline import Pipeline
-from cognigraph.nodes import sources, processors, outputs, node
-from cognigraph import TIME_AXIS
+from cognigraph.nodes import sources, processors, outputs
 from cognigraph.gui.window import GUIWindow
+
+# Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
+import numpy as np
+np.warnings.filterwarnings('ignore')
+
+sys.path.append('../vendor/nfb')  # For nfb submodule
 
 app = QtGui.QApplication(sys.argv)
 
 SURF_DIR = op.join(mne.datasets.sample.data_path(), 'subjects/sample/surf')
 DATA_DIR = '/home/dmalt/Code/python/cogni_submodules/tests/data'
-FWD_MODEL_NAME = 'DF_2018-03-02_11-34-38-fwd.fif'
-
-
+FWD_MODEL_NAME = 'dmalt_custom_mr-fwd.fif'
 # Собираем узлы в пайплайн
 
 pipeline = Pipeline()
@@ -75,69 +77,68 @@ window.initialize()
 
 # Симулируем работу препроцессинга по отлову шумных каналов
 
-# Set bad channels and calculate interpolation matrix manually
-# bad_channel_labels = ['Fp2', 'F5', 'C5', 'F2', 'PPO10h', 'POO1', 'FCC2h']
-# preprocessing._bad_channel_indices = mne.pick_channels(source.mne_info['ch_names'], include=bad_channel_labels)
-preprocessing._samples_to_be_collected = 0
-preprocessing._enough_collected = True
+# Set bad channels manually
+# bad_channel_labels = ['Fp2', 'F5', 'C5', 'F2', 'PPO10h', 'POO1', 'FCC2h', 'VEOG']
+# preprocessing._bad_channel_indices = mne.pick_channels(
+#     source.mne_info['ch_names'], include=bad_channel_labels)
+# preprocessing.mne_info['bads'] = bad_channel_labels
+# # preprocessing._samples_to_be_collected = 0
+# preprocessing._enough_collected = True
 
-preprocessing._interpolation_matrix = preprocessing._calculate_interpolation_matrix()
-message = node.Message(there_has_been_a_change=True,
-                       output_history_is_no_longer_valid=True)
-preprocessing._deliver_a_message_to_receivers(message)
+# message = node.Message(there_has_been_a_change=True,
+#                        output_history_is_no_longer_valid=True)
+# preprocessing._deliver_a_message_to_receivers(message)
 
-
-# # Обрезаем данные в диапазоне с приличной записью
-# vhdr_file_path = os.path.splitext(source.file_path)[0] + '.vhdr'
+# fif_file_path = source.file_path
 # start_s, stop_s = 80, 100
 # with source.not_triggering_reset():
-#     source.data, _ = read_brain_vision_data(vhdr_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
-
+#     source.data, _ = read_fif_data(
+#         fif_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 # Подключаем таймер окна к обновлению пайплайна
 class AsyncUpdater(QtCore.QRunnable):
     _stop_flag = False
-    
+
     def __init__(self):
         super(AsyncUpdater, self).__init__()
         self.setAutoDelete(False)
 
     def run(self):
         self._stop_flag = False
-        
-        while self._stop_flag == False:
+
+        while self._stop_flag is False:
             start = time.time()
             pipeline.update_all_nodes()
             end = time.time()
-            
+
             # Force sleep to update at 10Hz
             if end - start < 0.1:
                 time.sleep(0.1 - (end - start))
-        
+
     def stop(self):
         self._stop_flag = True
+
 
 pool = QtCore.QThreadPool.globalInstance()
 updater = AsyncUpdater()
 is_paused = True
 
+
 def toggle_updater():
     global pool
     global updater
     global is_paused
-    
-    if is_paused == True:
+
+    if is_paused:
         is_paused = False
         pool.start(updater)
     else:
         is_paused = True
         updater.stop()
         pool.waitForDone()
-        
-window.control_button.clicked.connect(toggle_updater)
 
-# Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
-import numpy as np
-np.warnings.filterwarnings('ignore')
+
+window.run_button.clicked.connect(toggle_updater)
+
 
 # Show window and exit on close
 window.show()

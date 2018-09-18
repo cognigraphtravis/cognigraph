@@ -3,6 +3,8 @@ import time
 import sys
 import os.path as op
 
+import os
+os.environ['PYQTGRAPH_QT_LIB'] = 'PyQt5'
 from pyqtgraph import QtCore, QtGui
 import pyqtgraph
 
@@ -59,9 +61,11 @@ three_dee_brain = outputs.ThreeDeeBrain(
 pipeline.add_output(three_dee_brain)
 # pipeline.add_output(outputs.LSLStreamOutput())
 # pipeline.initialize_all_nodes()
+file_output = outputs.FileOutput()
 
 signal_viewer = outputs.SignalViewer()
 pipeline.add_output(signal_viewer, input_node=linear_filter)
+pipeline.add_output(file_output, input_node=beamformer)
 
 window = GUIWindow(pipeline=pipeline)
 window.init_ui()
@@ -141,7 +145,7 @@ def toggle_updater():
         updater.stop()
         pool.waitForDone()
         
-window.control_button.clicked.connect(toggle_updater)
+window.run_button.clicked.connect(toggle_updater)
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
 import numpy as np
