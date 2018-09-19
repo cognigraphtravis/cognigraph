@@ -125,14 +125,26 @@ class Preprocessing(ProcessorNode):
 
 
 class InverseModel(ProcessorNode):
-    def _on_input_history_invalidation(self):
-        # The methods implemented in this node do not rely on past inputs
-        pass
-
+    SUPPORTED_METHODS = ['MNE', 'dSPM', 'sLORETA']
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
     CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path',
                                       'snr', 'method')
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
+
+    def __init__(self, forward_model_path=None, snr=1.0, method='MNE'):
+        super().__init__()
+
+        self.snr = snr
+        self._user_provided_forward_model_file_path = forward_model_path
+        self._default_forward_model_file_path = None
+        self.mne_info = None
+
+        self._inverse_model_matrix = None
+        self.method = method
+
+    def _on_input_history_invalidation(self):
+        # The methods implemented in this node do not rely on past inputs
+        pass
 
     def _check_value(self, key, value):
         if key == 'method':
@@ -151,19 +163,6 @@ class InverseModel(ProcessorNode):
         self.initialize()
         output_history_is_no_longer_valid = True
         return output_history_is_no_longer_valid
-
-    SUPPORTED_METHODS = ['MNE', 'dSPM', 'sLORETA']
-
-    def __init__(self, forward_model_path=None, snr=1.0, method='MNE'):
-        super().__init__()
-
-        self.snr = snr
-        self._user_provided_forward_model_file_path = forward_model_path
-        self._default_forward_model_file_path = None
-        self.mne_info = None
-
-        self._inverse_model_matrix = None
-        self.method = method
 
     @property
     def mne_forward_model_file_path(self):
