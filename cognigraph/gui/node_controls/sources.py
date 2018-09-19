@@ -114,7 +114,7 @@ class FileSourceControls(SourceControls):
                 filter=filter_string)
 
         if file_path != "":
-            self.file_path_str.setValue(file_path)
+            self.file_path_str.setValue(file_path[0])
 
     def _on_file_path_changed(self, param, value):
         self._pipeline.source.file_path = value

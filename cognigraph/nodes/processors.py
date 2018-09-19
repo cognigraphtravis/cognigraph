@@ -130,7 +130,7 @@ class InverseModel(ProcessorNode):
         pass
 
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
-    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path',
+    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path', 'mne_forward_model_file_path',
                                       'snr', 'method')
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
@@ -339,6 +339,12 @@ class EnvelopeExtractor(ProcessorNode):
 class Beamformer(ProcessorNode):
 
     SUPPORTED_OUTPUT_TYPES = ('power', 'activation')
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info',)
+    CHANGES_IN_THESE_REQUIRE_RESET = ('snr', 'output_type', 'is_adaptive',
+                                      'fixed_orientation',
+                                      'mne_forward_model_file_path')
+
+    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
     def __init__(self, snr: float=1.0, output_type: str='power',
                  is_adaptive: bool=False, fixed_orientation: bool=True,
@@ -381,9 +387,12 @@ class Beamformer(ProcessorNode):
             self._default_forward_model_file_path = get_default_forward_file(
                     mne_info)
 
-        self._gain_matrix, self._channel_indices = assemble_gain_matrix(
-                self.mne_forward_model_file_path, mne_info, drop_missing=True,
-                force_fixed=self.fixed_orientation)
+        try:
+            self._gain_matrix, self._channel_indices = assemble_gain_matrix(
+                    self.mne_forward_model_file_path, mne_info,
+                    drop_missing=True, force_fixed=self.fixed_orientation)
+        except ValueError:
+            raise Exception('BAD FORWARD + DATA COMBINATION!')
 
         G = self._gain_matrix
         if self.is_adaptive is False:
@@ -430,10 +439,6 @@ class Beamformer(ProcessorNode):
         else:
             self._filters = None
 
-    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info',)
-    CHANGES_IN_THESE_REQUIRE_RESET = ('snr', 'output_type', 'is_adaptive',
-                                      'fixed_orientation')
-    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
     def _update(self):
         input_array = self.input_node.output
@@ -605,7 +610,7 @@ class MCE(ProcessorNode):
     output = []
 
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ()
-    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path', 'snr')
+    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_forward_model_file_path', 'snr')
 
     def _on_input_history_invalidation(self):
         # The methods implemented in this node do not rely on past inputs
