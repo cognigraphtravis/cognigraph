@@ -205,7 +205,7 @@ class BeamformerControls(ProcessorNodeControls):
 
 
 class MCEControls(ProcessorNodeControls):
-    CONTROLS_LABEL = 'Inverse modelling'
+    CONTROLS_LABEL = 'MCE Inverse modelling'
     PROCESSOR_CLASS = processors.MCE
 
     METHODS_COMBO_NAME = 'Method: '

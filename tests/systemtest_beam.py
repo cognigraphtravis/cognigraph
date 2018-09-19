@@ -62,10 +62,12 @@ pipeline.add_output(three_dee_brain)
 # pipeline.add_output(outputs.LSLStreamOutput())
 # pipeline.initialize_all_nodes()
 file_output = outputs.FileOutput()
+torch_output = outputs.TorchOutput()
 
 signal_viewer = outputs.SignalViewer()
 pipeline.add_output(signal_viewer, input_node=linear_filter)
 pipeline.add_output(file_output, input_node=beamformer)
+pipeline.add_output(torch_output, input_node=source)
 
 window = GUIWindow(pipeline=pipeline)
 window.init_ui()
