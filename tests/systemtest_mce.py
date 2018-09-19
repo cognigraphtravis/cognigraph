@@ -3,8 +3,10 @@ import time
 import sys
 import os.path as op
 
-from pyqtgraph import QtCore, QtGui
+from PyQt5 import QtCore, QtGui
 
+import os
+os.environ['PYQTGRAPH_QT_LIB'] = 'PyQt5'
 from cognigraph.helpers.brainvision import read_fif_data
 from cognigraph.pipeline import Pipeline
 from cognigraph.nodes import sources, processors, outputs
@@ -81,7 +83,7 @@ envelope_controls = processors_controls.children()[2]
 
 three_dee_brain_controls = outputs_controls.children()[0]
 three_dee_brain_controls.threshold_slider.setValue(50)
-three_dee_brain_controls.limits_mode_combo.setValue('Local')
+# three_dee_brain_controls.limits_mode_combo.setValue('Local')
 
 window.initialize()
 
