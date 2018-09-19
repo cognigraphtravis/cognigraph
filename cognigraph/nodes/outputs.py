@@ -215,10 +215,6 @@ class BrainPainter(QObject):
         self.draw_sig.connect(self.on_draw)
 
     def initialize(self, mne_forward_model_file_path):
-        self.surfaces_dir = (
-            self.surfaces_dir or
-            self._guess_surfaces_dir_based_on(mne_forward_model_file_path))
-        self.mesh_data = self._get_mesh_data_from_surfaces_dir()
         self.smoothing_matrix = self._get_smoothing_matrix(
             mne_forward_model_file_path)
 
@@ -232,6 +228,7 @@ class BrainPainter(QObject):
         #     meshdata=self.mesh_data, shader='shaded')
         # self.widget.addItem(self.mesh_item)
         if self.widget is None:
+            self.mesh_data = self._get_mesh_data_from_surfaces_dir()
             self.widget = self._create_widget()
         else:  # Do not recreate the widget, just clear it
             for item in self.widget.items:
