@@ -1,7 +1,6 @@
-﻿import sys
+﻿import argparse
+import sys
 import time
-
-
 from PyQt5 import QtCore, QtGui
 import mne
 import os.path as op
@@ -14,6 +13,13 @@ from cognigraph.gui.window import GUIWindow
 import numpy as np
 np.warnings.filterwarnings('ignore')
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-d','--data', type=argparse.FileType('r'),
+                    help='data path')
+parser.add_argument('-f', '--forward', type=argparse.FileType('r'),
+                    help='forward model path')
+args = parser.parse_args()
+
 sys.path.append('../vendor/nfb')  # For nfb submodule
 
 app = QtGui.QApplication(sys.argv)
@@ -25,12 +31,35 @@ FWD_MODEL_NAME = 'dmalt_custom_mr-fwd.fif'
 
 pipeline = Pipeline()
 
-launch_test_filepath = QtGui.QFileDialog.getOpenFileName(
-        caption="Select Data",
-        filter="Brainvision (*.eeg *.vhdr *.vmrk);;" +
-               "MNE-python (*.fif);;" +
-               "European Data Format (*.edf)")
-source = sources.FileSource(file_path=launch_test_filepath)
+if not args.data:
+        file_tuple = QtGui.QFileDialog.getOpenFileName(
+                caption="Select Data",
+                filter="Brainvision (*.eeg *.vhdr *.vmrk);;" +
+                       "MNE-python (*.fif);;" +
+                       "European Data Format (*.edf)")
+        print(file_tuple)
+        file_path = file_tuple[0]
+else:
+    file_path = args.data.name
+
+if not file_path:
+    raise Exception("DATA PATH IS MANDATORY!")
+
+if not args.forward:
+    try:
+        fwd_tuple = QtGui.QFileDialog.getOpenFileName(
+                caption="Select forward model",
+                filter= "MNE-python forward (*-fwd.fif)")
+        fwd_path = fwd_tuple[0]
+    except:
+        print("DATA FILE IS MANDATORY!")
+else:
+    fwd_path = args.forward.name
+
+if not fwd_path:
+    raise Exception("FORWARD SOLUTION IS MANDATORY!")
+
+source = sources.FileSource(file_path=file_path)
 # source = sources.FileSource()
 source.loop_the_file = True
 source.MAX_SAMPLES_IN_CHUNK = 10000
@@ -46,7 +75,7 @@ pipeline.add_processor(linear_filter)
 
 inverse_model = processors.InverseModel(
         method='MNE', snr=1.0,
-        forward_model_path=op.join(DATA_DIR, FWD_MODEL_NAME))
+        forward_model_path=fwd_path)
 pipeline.add_processor(inverse_model)
 
 envelope_extractor = processors.EnvelopeExtractor(0.99)
