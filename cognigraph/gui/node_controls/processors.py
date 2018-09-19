@@ -1,3 +1,4 @@
+from PyQt5 import QtGui
 from ...nodes.node import ProcessorNode
 from ...nodes import processors
 from ...helpers.pyqtgraph import MyGroupParameter, parameterTypes
