@@ -29,6 +29,8 @@ from vendor.nfb.pynfb.widgets.signal_viewers import RawSignalViewer as nfbSignal
 from ..gui.brain_visual import BrainMesh
 from vispy import app, gloo, visuals, scene, io
 
+import torch
+
 class LSLStreamOutput(OutputNode):
 
     def _on_input_history_invalidation(self):
@@ -469,3 +471,24 @@ class FileOutput(OutputNode):
     def _update(self):
         chunk = self.input_node.output
         self.output_array.append(chunk)
+
+
+class TorchOutput(OutputNode):
+
+    CHANGES_IN_THESE_REQUIRE_RESET = ()
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ()
+
+    def _on_input_history_invalidation(self):
+        pass
+
+    def _check_value(self, key, value):
+        pass  # TODO: check that value as a string usable as a stream name
+
+    def _reset(self):
+        pass
+
+    def _initialize(self):
+        pass
+
+    def _update(self):
+        self.output = torch.from_numpy(self.input_node.output)

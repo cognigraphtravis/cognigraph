@@ -194,3 +194,11 @@ class FileOutputControls(OutputNodeControls):
 
     def _create_parameters(self):
         pass
+
+
+class TorchOutputControls(OutputNodeControls):
+    OUTPUT_CLASS = outputs.TorchOutput
+    CONTROLS_LABEL = 'Torch Tensor Output'
+
+    def _create_parameters(self):
+        pass

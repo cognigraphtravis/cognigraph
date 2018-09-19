@@ -66,7 +66,8 @@ class OutputsControls(MultipleNodeControls):
         NodeControlClasses(output_nodes.LSLStreamOutput, outputs_controls.LSLStreamOutputControls),
         NodeControlClasses(output_nodes.ThreeDeeBrain, outputs_controls.ThreeDeeBrainControls),
         NodeControlClasses(output_nodes.SignalViewer, outputs_controls.SignalViewerControls),
-        NodeControlClasses(output_nodes.FileOutput, outputs_controls.FileOutputControls)
+        NodeControlClasses(output_nodes.FileOutput, outputs_controls.FileOutputControls),
+        NodeControlClasses(output_nodes.TorchOutput, outputs_controls.TorchOutputControls)
     ]
 
 
