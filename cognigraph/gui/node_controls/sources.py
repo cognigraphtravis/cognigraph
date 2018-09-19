@@ -1,5 +1,5 @@
 from pyqtgraph.parametertree import parameterTypes
-from pyqtgraph import QtCore, QtGui
+from PyQt5 import QtCore, QtGui
 import pylsl
 
 from ...helpers.pyqtgraph import MyGroupParameter
