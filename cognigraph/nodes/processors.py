@@ -488,10 +488,10 @@ class Beamformer(ProcessorNode):
     def _reset(self) -> bool:
 
         # Only change adaptiveness or fixed_orientation requires reinit
-        if (self._initialized_as_adaptive is not self.is_adaptive
-                or self._initialized_as_fixed is not self.fixed_orientation):
-            self._should_reinitialize = True
-            self.initialize()
+        # if (self._initialized_as_adaptive is not self.is_adaptive
+        #         or self._initialized_as_fixed is not self.fixed_orientation):
+        self._should_reinitialize = True
+        self.initialize()
 
         output_history_is_no_longer_valid = True
         return output_history_is_no_longer_valid

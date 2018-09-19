@@ -230,9 +230,9 @@ class BrainPainter(QObject):
         if self.widget is None:
             self.mesh_data = self._get_mesh_data_from_surfaces_dir()
             self.widget = self._create_widget()
-        else:  # Do not recreate the widget, just clear it
-            for item in self.widget.items:
-                self.widget.removeItem(item)
+        # else:  # Do not recreate the widget, just clear it
+        #     for item in self.widget.items:
+        #         self.widget.removeItem(item)
 
     def on_draw(self, normalized_values):
         now = time.time()
@@ -452,19 +452,22 @@ class FileOutput(OutputNode):
         self._should_reinitialize = True
         self.initialize()
 
-    def __init__(self, output_file='output.h5'):
+    def __init__(self, output_fname='output.h5'):
         super().__init__()
-        self.output_file = output_file
+        self.output_fname = output_fname
+        self.out_file = None
 
     def _initialize(self):
+        if self.out_file:  # for resets
+            self.out_file.close()
 
         info = self.traverse_back_and_find('mne_info')
         col_size = info['nchan']
-        f = tables.open_file(self.output_file, mode='w')
+        self.out_file = tables.open_file(self.output_fname, mode='w')
         atom = tables.Float64Atom()
 
-        self.output_array = f.create_earray(
-            f.root, 'data', atom, (col_size, 0))
+        self.output_array = self.out_file.create_earray(
+            self.out_file.root, 'data', atom, (col_size, 0))
 
     def _update(self):
         chunk = self.input_node.output
