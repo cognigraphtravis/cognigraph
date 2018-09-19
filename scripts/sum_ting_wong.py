@@ -13,7 +13,7 @@ app = QtGui.QApplication(sys.argv)
 pipeline = Pipeline()
 
 file_path = r"/home/evgenii/Downloads/brainvision/Bulavenkova_A_2017-10-24_15-33-18_Rest.vhdr"
-source = sources.BrainvisionSource(file_path=file_path)
+source = sources.FileSource(file_path=file_path)
 pipeline.source = source
 
 inverse = processors.InverseModel()
@@ -34,7 +34,7 @@ three_dee.update()
 # Sample
 pipeline = Pipeline()
 
-source = sources.BrainvisionSource(file_path='')
+source = sources.FileSource(file_path='')
 pipeline.source = source
 
 import mne

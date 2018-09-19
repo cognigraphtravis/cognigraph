@@ -9,7 +9,7 @@ from mne.io.pick import channel_type
 from ..helpers.misc import class_name_of
 import logging
 
-logging.basicConfig(filename='cognigraph.log',level=logging.INFO,
+logging.basicConfig(filename='cognigraph.log', level=logging.INFO,
                     format='%(asctime)s:%(name)-17s:%(levelname)s:%(message)s')
 
 class Message(object):

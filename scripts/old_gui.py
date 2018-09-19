@@ -17,7 +17,7 @@ file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.eeg"
 # vhdr_file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.vhdr"
 # vhdr_file_path = r"/home/dmalt/Data/cognigraph/data/Koleno.fif"
 fwd_path = r'/home/dmalt/mne_data/MNE-sample-data/MEG/sample/dmalt_custom-fwd.fif'
-source = sources.BrainvisionSource(file_path=file_path)
+source = sources.FileSource(file_path=file_path)
 pipeline.source = source
 # pipeline.source = sources.LSLStreamSource(stream_name='cognigraph-mock-stream')
 

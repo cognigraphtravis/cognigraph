@@ -1,3 +1,4 @@
+from PyQt5 import QtGui
 from ...nodes.node import ProcessorNode
 from ...nodes import processors
 from ...helpers.pyqtgraph import MyGroupParameter, parameterTypes
@@ -107,8 +108,33 @@ class LinearFilterControls(ProcessorNodeControls):
 class InverseModelControls(ProcessorNodeControls):
     CONTROLS_LABEL = 'Inverse modelling'
     PROCESSOR_CLASS = processors.InverseModel
-
     METHODS_COMBO_NAME = 'Method: '
+    FILE_PATH_STR_NAME = 'Path to forward solution: '
+
+    def __init__(self, pipeline, **kwargs):
+        kwargs['title'] = 'Forward solution file'
+        super().__init__(pipeline, **kwargs)
+
+        try:
+            file_path = self._processor_node.mne_forward_model_file_path
+        except:
+            file_path = ''
+
+        # Add LineEdit for choosing file
+        file_path_str = parameterTypes.SimpleParameter(
+                type='str', name=self.FILE_PATH_STR_NAME, value=file_path)
+
+        file_path_str.sigValueChanged.connect(self._on_file_path_changed)
+
+        self.file_path_str = self.addChild(file_path_str)
+
+        # Add PushButton for choosing file
+        file_path_button = parameterTypes.ActionParameter(
+                type='action', name="Select data...")
+
+        file_path_button.sigActivated.connect(self._choose_file)
+
+        self.file_path_button = self.addChild(file_path_button)
 
     def _create_parameters(self):
 
@@ -121,6 +147,17 @@ class InverseModelControls(ProcessorNodeControls):
 
     def _on_method_changed(self, param, value):
         self._processor_node.method = value
+
+    def _choose_file(self):
+        file_path = QtGui.QFileDialog.getOpenFileName(
+                caption="Select forward solution",
+                filter="MNE-python forward (*-fwd.fif)")
+
+        if file_path != "":
+            self.file_path_str.setValue(file_path[0])
+
+    def _on_file_path_changed(self, param, value):
+        self._processor_node.mne_forward_model_file_path = value
 
 
 class EnvelopeExtractorControls(ProcessorNodeControls):
@@ -160,6 +197,28 @@ class BeamformerControls(ProcessorNodeControls):
     SNR_NAME = 'SNR: '
     OUTPUT_TYPE_COMBO_NAME = 'Output type: '
     FORGETTING_FACTOR_NAME = 'Forgetting factor (per second): '
+    FILE_PATH_STR_NAME = 'Path to forward solution: '
+
+    def __init__(self, pipeline, **kwargs):
+        kwargs['title'] = 'Forward solution file'
+        super().__init__(pipeline, **kwargs)
+
+        try:
+            file_path = self._processor_node.mne_forward_model_file_path
+        except:
+            file_path = ''
+        # Add LineEdit for choosing file
+        file_path_str = parameterTypes.SimpleParameter(
+                type='str', name=self.FILE_PATH_STR_NAME, value=file_path)
+
+        file_path_str.sigValueChanged.connect(self._on_file_path_changed)
+        self.file_path_str = self.addChild(file_path_str)
+        # Add PushButton for choosing file
+        file_path_button = parameterTypes.ActionParameter(
+                type='action', name="Select data...")
+
+        file_path_button.sigActivated.connect(self._choose_file)
+        self.file_path_button = self.addChild(file_path_button)
 
     def _create_parameters(self):
         # snr: float = 3.0, output_type: str = 'power', is_adaptive: bool = False,
@@ -203,6 +262,17 @@ class BeamformerControls(ProcessorNodeControls):
     def _on_forgetting_factor_changed(self, param, value):
         self._processor_node.forgetting_factor_per_second = value
 
+    def _choose_file(self):
+        file_path = QtGui.QFileDialog.getOpenFileName(
+                caption="Select forward solution",
+                filter="MNE-python forward (*-fwd.fif)")
+
+        if file_path != "":
+            self.file_path_str.setValue(file_path[0])
+
+    def _on_file_path_changed(self, param, value):
+        self._processor_node.mne_forward_model_file_path = value
+
 
 class MCEControls(ProcessorNodeControls):
     CONTROLS_LABEL = 'MCE Inverse modelling'
@@ -210,6 +280,7 @@ class MCEControls(ProcessorNodeControls):
 
     METHODS_COMBO_NAME = 'Method: '
 
+    FILE_PATH_STR_NAME = 'Path to forward solution: '
     def _create_parameters(self):
 
         # method_values = self.PROCESSOR_CLASS.SUPPORTED_METHODS
@@ -220,9 +291,41 @@ class MCEControls(ProcessorNodeControls):
         # self.methods_combo = self.addChild(methods_combo)
         pass
 
+    def __init__(self, pipeline, **kwargs):
+        kwargs['title'] = 'Forward solution file'
+        super().__init__(pipeline, **kwargs)
+
+        try:
+            file_path = self._processor_node.mne_forward_model_file_path
+        except:
+            file_path = ''
+        # Add LineEdit for choosing file
+        file_path_str = parameterTypes.SimpleParameter(
+                type='str', name=self.FILE_PATH_STR_NAME, value=file_path)
+
+        file_path_str.sigValueChanged.connect(self._on_file_path_changed)
+        self.file_path_str = self.addChild(file_path_str)
+        # Add PushButton for choosing file
+        file_path_button = parameterTypes.ActionParameter(
+                type='action', name="Select data...")
+
+        file_path_button.sigActivated.connect(self._choose_file)
+        self.file_path_button = self.addChild(file_path_button)
+
     def _on_method_changed(self, param, value):
         # self._processor_node.method = value
         pass
+
+    def _choose_file(self):
+        file_path = QtGui.QFileDialog.getOpenFileName(
+                caption="Select forward solution",
+                filter="MNE-python forward (*-fwd.fif)")
+
+        if file_path != "":
+            self.file_path_str.setValue(file_path[0])
+
+    def _on_file_path_changed(self, param, value):
+        self._processor_node.mne_forward_model_file_path = value
 
 
 class ICARejectionControls(ProcessorNodeControls):

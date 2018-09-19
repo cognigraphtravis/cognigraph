@@ -33,7 +33,7 @@ surf_dir = '/home/dmalt/mne_data/MNE-sample-data/subjects/sample/surf'
 fwd_path = op.join(test_data_path, fwd_fname)
 sim_data_path = op.join(test_data_path, sim_data_fname)
 
-source = sources.FifSource(file_path=sim_data_path)
+source = sources.FileSource(file_path=sim_data_path)
 source.MAX_SAMPLES_IN_CHUNK = 10000
 source.loop_the_file = True
 pipeline.source = source

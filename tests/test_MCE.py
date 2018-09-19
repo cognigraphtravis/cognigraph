@@ -2,7 +2,7 @@ import pytest
 # from nose.tools import assert_equals, raises
 # from scripts.mce import MCE
 from cognigraph.nodes.processors import MCE
-from cognigraph.nodes.sources import FifSource
+from cognigraph.nodes.sources import FileSource
 import os.path as op
 import numpy as np
 from mne.io import read_info
@@ -21,7 +21,7 @@ def mce():
     mce.mne_info = info
     N_SEN = len(info['ch_names'])
     mce.input = np.random.rand(N_SEN)
-    input_node = FifSource()
+    input_node = FileSource()
     input_node.output = np.random.rand(info['nchan'], 1)
     input_node.mne_info = info
     mce.input_node = input_node
@@ -33,7 +33,7 @@ def mce_def():
     info_src_path = op.join(test_data_path, 'Koleno.fif')
     info = read_info(info_src_path)
     mce_def = MCE()
-    input_node = FifSource()
+    input_node = FileSource()
     input_node.mne_info = info
     input_node.output = np.random.rand(info['nchan'], 1)
     mce_def.input_node = input_node

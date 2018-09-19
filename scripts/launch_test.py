@@ -1,49 +1,66 @@
-﻿import sys
+﻿import argparse
+import sys
 import time
-
-
 from PyQt5 import QtCore, QtGui
 import mne
-import os
+import os.path as op
 
-from cognigraph.helpers.brainvision import read_brain_vision_data, read_fif_data
 from cognigraph.pipeline import Pipeline
-from cognigraph.nodes import sources, processors, outputs, node
-from cognigraph import TIME_AXIS
+from cognigraph.nodes import sources, processors, outputs
 from cognigraph.gui.window import GUIWindow
 
 # Убираем предупреждения numpy, иначе в iPython некрасиво как-то Ж)
 import numpy as np
 np.warnings.filterwarnings('ignore')
 
+parser = argparse.ArgumentParser()
+parser.add_argument('-d','--data', type=argparse.FileType('r'),
+                    help='data path')
+parser.add_argument('-f', '--forward', type=argparse.FileType('r'),
+                    help='forward model path')
+args = parser.parse_args()
+
 sys.path.append('../vendor/nfb')  # For nfb submodule
 
 app = QtGui.QApplication(sys.argv)
 
-import os.path as op
-cur_dir =  '/home/dmalt/Code/python/cogni_submodules'
-test_data_path = cur_dir + '/tests/data/'
-print(test_data_path)
-# sim_data_fname = 'raw_sim.fif'
-sim_data_fname = 'Koleno.fif'
-# fwd_fname = 'dmalt_custom_lr-fwd.fif'
-fwd_fname = 'dmalt_custom_mr-fwd.fif'
-fwd_path = op.join(test_data_path, fwd_fname)
-
-surf_dir = '/home/dmalt/mne_data/MNE-sample-data/subjects/sample/surf'
+SURF_DIR = op.join(mne.datasets.sample.data_path(), 'subjects/sample/surf')
+DATA_DIR = '/home/dmalt/Code/python/cogni_submodules/tests/data'
+FWD_MODEL_NAME = 'dmalt_custom_mr-fwd.fif'
 # Собираем узлы в пайплайн
 
 pipeline = Pipeline()
 
-# launch_test_filepath = QtGui.QFileDialog.getOpenFileName(
-#     caption="Select Data", filter="Brainvision (*.eeg *.vhdr *.vmrk)")[0]
+if not args.data:
+        file_tuple = QtGui.QFileDialog.getOpenFileName(
+                caption="Select Data",
+                filter="Brainvision (*.eeg *.vhdr *.vmrk);;" +
+                       "MNE-python (*.fif);;" +
+                       "European Data Format (*.edf)")
+        print(file_tuple)
+        file_path = file_tuple[0]
+else:
+    file_path = args.data.name
 
-launch_test_filepath = QtGui.QFileDialog.getOpenFileName(
-    caption="Select Data", filter="Fif (*.fif)")[0]
+if not file_path:
+    raise Exception("DATA PATH IS MANDATORY!")
 
-# source = sources.BrainvisionSource(file_path=launch_test_filepath)
-source = sources.FifSource(file_path=launch_test_filepath)
+if not args.forward:
+    try:
+        fwd_tuple = QtGui.QFileDialog.getOpenFileName(
+                caption="Select forward model",
+                filter= "MNE-python forward (*-fwd.fif)")
+        fwd_path = fwd_tuple[0]
+    except:
+        print("DATA FILE IS MANDATORY!")
+else:
+    fwd_path = args.forward.name
 
+if not fwd_path:
+    raise Exception("FORWARD SOLUTION IS MANDATORY!")
+
+source = sources.FileSource(file_path=file_path)
+# source = sources.FileSource()
 source.loop_the_file = True
 source.MAX_SAMPLES_IN_CHUNK = 10000
 pipeline.source = source
@@ -56,8 +73,9 @@ pipeline.add_processor(preprocessing)
 linear_filter = processors.LinearFilter(lower_cutoff=8.0, upper_cutoff=12.0)
 pipeline.add_processor(linear_filter)
 
-inverse_model = processors.InverseModel(method='MNE', snr=1.0,
-                                        forward_model_path=fwd_path)
+inverse_model = processors.InverseModel(
+        method='MNE', snr=1.0,
+        forward_model_path=fwd_path)
 pipeline.add_processor(inverse_model)
 
 envelope_extractor = processors.EnvelopeExtractor(0.99)
@@ -65,8 +83,8 @@ pipeline.add_processor(envelope_extractor)
 
 # Outputs
 global_mode = outputs.ThreeDeeBrain.LIMITS_MODES.GLOBAL
-three_dee_brain = outputs.ThreeDeeBrain(limits_mode=global_mode,
-                                        buffer_length=6, surfaces_dir=surf_dir)
+three_dee_brain = outputs.ThreeDeeBrain(
+        limits_mode=global_mode, buffer_length=6, surfaces_dir=SURF_DIR)
 pipeline.add_output(three_dee_brain)
 # pipeline.add_output(outputs.LSLStreamOutput())
 
@@ -100,18 +118,11 @@ window.initialize()
 #                        output_history_is_no_longer_valid=True)
 # preprocessing._deliver_a_message_to_receivers(message)
 
-# Обрезаем данные в диапазоне с приличной записью
-# vhdr_file_path = os.path.splitext(source.file_path)[0] + '.vhdr'
+# fif_file_path = source.file_path
 # start_s, stop_s = 80, 100
 # with source.not_triggering_reset():
-#     source.data, _ = read_brain_vision_data(
-#         vhdr_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
-
-fif_file_path = source.file_path
-start_s, stop_s = 80, 100
-with source.not_triggering_reset():
-    source.data, _ = read_fif_data(
-        fif_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
+#     source.data, _ = read_fif_data(
+#         fif_file_path, time_axis=TIME_AXIS, start_s=start_s, stop_s=stop_s)
 # Подключаем таймер окна к обновлению пайплайна
 class AsyncUpdater(QtCore.QRunnable):
     _stop_flag = False
@@ -123,7 +134,7 @@ class AsyncUpdater(QtCore.QRunnable):
     def run(self):
         self._stop_flag = False
 
-        while self._stop_flag == False:
+        while self._stop_flag is False:
             start = time.time()
             pipeline.update_all_nodes()
             end = time.time()
@@ -135,16 +146,18 @@ class AsyncUpdater(QtCore.QRunnable):
     def stop(self):
         self._stop_flag = True
 
+
 pool = QtCore.QThreadPool.globalInstance()
 updater = AsyncUpdater()
 is_paused = True
+
 
 def toggle_updater():
     global pool
     global updater
     global is_paused
 
-    if is_paused == True:
+    if is_paused:
         is_paused = False
         pool.start(updater)
     else:

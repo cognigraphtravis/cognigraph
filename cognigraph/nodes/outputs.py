@@ -217,10 +217,6 @@ class BrainPainter(QObject):
         self.draw_sig.connect(self.on_draw)
 
     def initialize(self, mne_forward_model_file_path):
-        self.surfaces_dir = (
-            self.surfaces_dir or
-            self._guess_surfaces_dir_based_on(mne_forward_model_file_path))
-        self.mesh_data = self._get_mesh_data_from_surfaces_dir()
         self.smoothing_matrix = self._get_smoothing_matrix(
             mne_forward_model_file_path)
 
@@ -234,10 +230,11 @@ class BrainPainter(QObject):
         #     meshdata=self.mesh_data, shader='shaded')
         # self.widget.addItem(self.mesh_item)
         if self.widget is None:
+            self.mesh_data = self._get_mesh_data_from_surfaces_dir()
             self.widget = self._create_widget()
-        else:  # Do not recreate the widget, just clear it
-            for item in self.widget.items:
-                self.widget.removeItem(item)
+        # else:  # Do not recreate the widget, just clear it
+        #     for item in self.widget.items:
+        #         self.widget.removeItem(item)
 
     def on_draw(self, normalized_values):
         now = time.time()
@@ -265,8 +262,11 @@ class BrainPainter(QObject):
         self.draw_sig.emit(normalized_values)
 
     def _get_mesh_data_from_surfaces_dir(self, cortex_type='pial') -> gl.MeshData:
-        surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
-                      for h in ('lh', 'rh')]
+        if self.surfaces_dir:
+            surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
+                          for h in ('lh', 'rh')]
+        else:
+            raise NameError('surfaces_dir is not set')
         lh_mesh, rh_mesh = [nib.freesurfer.read_geometry(surf_path) for surf_path in surf_paths]
         lh_vertexes, lh_faces = lh_mesh
         rh_vertexes, rh_faces = rh_mesh
@@ -454,19 +454,22 @@ class FileOutput(OutputNode):
         self._should_reinitialize = True
         self.initialize()
 
-    def __init__(self, output_file='output.h5'):
+    def __init__(self, output_fname='output.h5'):
         super().__init__()
-        self.output_file = output_file
+        self.output_fname = output_fname
+        self.out_file = None
 
     def _initialize(self):
+        if self.out_file:  # for resets
+            self.out_file.close()
 
         info = self.traverse_back_and_find('mne_info')
         col_size = info['nchan']
-        f = tables.open_file(self.output_file, mode='w')
+        self.out_file = tables.open_file(self.output_fname, mode='w')
         atom = tables.Float64Atom()
 
-        self.output_array = f.create_earray(
-            f.root, 'data', atom, (col_size, 0))
+        self.output_array = self.out_file.create_earray(
+            self.out_file.root, 'data', atom, (col_size, 0))
 
     def _update(self):
         chunk = self.input_node.output

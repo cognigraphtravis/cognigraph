@@ -2,7 +2,7 @@ import pytest
 # from nose.tools import assert_equals, raises
 # from scripts.beamformer import MCE
 from cognigraph.nodes.processors import Beamformer
-from cognigraph.nodes.sources import FifSource
+from cognigraph.nodes.sources import FileSource
 import os.path as op
 import numpy as np
 from mne.io import read_info
@@ -22,7 +22,7 @@ def beamformer():
     beamformer.mne_info = info
     N_SEN = len(info['ch_names'])
     beamformer.input = np.random.rand(N_SEN)
-    input_node = FifSource()
+    input_node = FileSource()
     input_node.output = np.random.rand(info['nchan'], 1)
     input_node.mne_info = info
     beamformer.input_node = input_node
@@ -34,7 +34,7 @@ def beamformer_def():
     info_src_path = op.join(test_data_path, 'Koleno.fif')
     info = read_info(info_src_path)
     beamformer_def = Beamformer()
-    input_node = FifSource()
+    input_node = FileSource()
     input_node.mne_info = info
     input_node.output = np.random.rand(info['nchan'], 1)
     beamformer_def.input_node = input_node
