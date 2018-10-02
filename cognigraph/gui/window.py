@@ -1,10 +1,7 @@
 from typing import List
-
 from PyQt5 import QtCore, QtGui, QtWidgets
-
 from ..pipeline import Pipeline
 from .controls import Controls
-
 from .screen_recorder import ScreenRecorder
 
 
@@ -60,7 +57,8 @@ class GUIWindow(QtGui.QMainWindow):
             # insert widget at before-the-end pos (just before controls widget)
             self.centralWidget().insertWidget(self.centralWidget().count() - 1,
                                               node_widget)
-            self.centralWidget().insertWidget(self.centralWidget().count()-1, node_widget)
+            self.centralWidget().insertWidget(
+                self.centralWidget().count() - 1, node_widget)
 
     def moveEvent(self, event):
         self._reset_gif_sector()
@@ -68,8 +66,10 @@ class GUIWindow(QtGui.QMainWindow):
 
     def _reset_gif_sector(self):
         widgetRect = self.centralWidget().widget(0).geometry()
-        widgetRect.moveTopLeft(self.centralWidget().mapToGlobal(widgetRect.topLeft()))
-        self._gif_recorder.sector = (widgetRect.left(), widgetRect.top(), widgetRect.right(), widgetRect.bottom())
+        widgetRect.moveTopLeft(
+            self.centralWidget().mapToGlobal(widgetRect.topLeft()))
+        self._gif_recorder.sector = (widgetRect.left(), widgetRect.top(),
+                                     widgetRect.right(), widgetRect.bottom())
 
     def _toggle_run_button(self):
         if self.run_button.text() == "Pause":

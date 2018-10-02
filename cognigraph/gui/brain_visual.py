@@ -23,7 +23,7 @@ import vispy.visuals.transforms as vist
 from vispy.scene.visuals import create_visual_node
 
 from ..helpers.vispy_utils import (Colormap, color2vb, convert_meshdata,
-                            wrap_properties, normalize)
+                                   wrap_properties, normalize)
 
 
 logger = logging.getLogger('cognigraph')

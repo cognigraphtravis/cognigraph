@@ -14,7 +14,7 @@ from matplotlib.colors import Colormap as matplotlib_Colormap
 from mne.datasets import sample
 from scipy import sparse
 
-from ..helpers.pysurfer.smoothing_matrix import smoothing_matrix as calculate_smoothing_matrix, mesh_edges
+from ..helpers.pysurfer.smoothing_matrix import smoothing_matrix, mesh_edges
 from .node import OutputNode
 from .. import CHANNEL_AXIS, TIME_AXIS, PYNFB_TIME_AXIS
 from ..helpers.lsl import (convert_numpy_format_to_lsl,
@@ -30,6 +30,7 @@ from ..gui.brain_visual import BrainMesh
 from vispy import app, gloo, visuals, scene, io
 
 import torch
+
 
 class LSLStreamOutput(OutputNode):
 
@@ -220,7 +221,6 @@ class BrainPainter(QObject):
         self.smoothing_matrix = self._get_smoothing_matrix(
             mne_forward_model_file_path)
 
-
         self.background_colors = self._calculate_background_colors(
             self.show_curvature)
         # self.mesh_data.setVertexColors(self.background_colors)
@@ -249,19 +249,20 @@ class BrainPainter(QObject):
         colors[mask] = self.background_colors[mask]
         colors[~mask] *= self.background_colors[~mask, 0, np.newaxis]
 
-        # self.mesh_data.setVertexColors(colors)
-        self.mesh_data._alphas[:, :] = 0.  # reset colors to white
+        # reset colors to white
+        self.mesh_data._alphas[:, :] = 0.
         self.mesh_data._alphas_buffer.set_data(self.mesh_data._alphas)
+
         if np.any(~mask):
-            self.mesh_data.add_overlay(
-                sources_smoothed[~mask], vertices=np.where(~mask)[0], to_overlay=1)
+            self.mesh_data.add_overlay(sources_smoothed[~mask],
+                                       vertices=np.where(~mask)[0],
+                                       to_overlay=1)
         self.mesh_data.update()
-            # self.mesh_item.meshDataChanged()
 
     def draw(self, normalized_values):
         self.draw_sig.emit(normalized_values)
 
-    def _get_mesh_data_from_surfaces_dir(self, cortex_type='pial') -> gl.MeshData:
+    def _get_mesh_data_from_surfaces_dir(self, cortex_type='inflated') -> gl.MeshData:
         if self.surfaces_dir:
             surf_paths = [os.path.join(self.surfaces_dir, '{}.{}'.format(h, cortex_type))
                           for h in ('lh', 'rh')]
@@ -388,14 +389,18 @@ class BrainPainter(QObject):
         # the forward model for drawing, we should index into that.
         # Shorter: the coordinates of the jth source are
         # in self.mesh_data.vertexes()[sources_idx[j], :]
-        smoothing_matrix_file_path = os.path.splitext(mne_forward_model_file_path)[0] + '-smoothing-matrix.npz'
+        smoothing_matrix_file_path = (
+            os.path.splitext(mne_forward_model_file_path)[0] +
+            '-smoothing-matrix.npz')
         try:
             return sparse.load_npz(smoothing_matrix_file_path)
         except FileNotFoundError:
-            print('Calculating smoothing matrix. This might take a while the first time.')
-            sources_idx, _ = self._get_mesh_data_from_forward_solution(mne_forward_model_file_path)
+            print('Calculating smoothing matrix.' +
+                  ' This might take a while the first time.')
+            sources_idx, _ = self._get_mesh_data_from_forward_solution(
+                mne_forward_model_file_path)
             adj_mat = mesh_edges(self.mesh_data.faces())
-            smoothing_matrix = calculate_smoothing_matrix(sources_idx, adj_mat)
+            smoothing_matrix = smoothing_matrix(sources_idx, adj_mat)
             sparse.save_npz(smoothing_matrix_file_path, smoothing_matrix)
             return smoothing_matrix
 

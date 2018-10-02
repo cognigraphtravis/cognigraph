@@ -128,7 +128,8 @@ class Preprocessing(ProcessorNode):
 class InverseModel(ProcessorNode):
     SUPPORTED_METHODS = ['MNE', 'dSPM', 'sLORETA']
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
-    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path', 'mne_forward_model_file_path',
+    CHANGES_IN_THESE_REQUIRE_RESET = ('mne_inverse_model_file_path',
+                                      'mne_forward_model_file_path',
                                       'snr', 'method')
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
@@ -694,7 +695,7 @@ class MCE(ProcessorNode):
         # ------------------- get dipole orientations --------------------- #
         stc_slice = apply_inverse_raw(raw_slice, self.mne_inv,
                                       pick_ori='vector',
-                                      method='MNE', lambda2=1)
+                                      method='MNE', lambda2=1, verbose='ERROR')
         Q = normalize(stc_slice.data[:, :, 0])  # dipole orientations
         # ----------------------------------------------------------------- #
 
