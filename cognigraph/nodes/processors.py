@@ -28,6 +28,7 @@ from ..helpers.inverse_model import (get_default_forward_file,
 from ..helpers.pynfb import (pynfb_ndarray_function_wrapper,
                              ExponentialMatrixSmoother)
 from ..helpers.channels import channel_labels_saver
+from ..helpers.aux_tools import nostdout
 from .. import TIME_AXIS
 from vendor.nfb.pynfb.signal_processing import filters
 
@@ -707,10 +708,12 @@ class MCE(ProcessorNode):
         c = np.ones(A_eq.shape[1])
         # -------------------------------------- #
 
-        sol = linprog(c, A_eq=A_eq, b_eq=b_eq,
-                      method='interior-point', bounds=(0, None),
-                      options={'disp': True})
-        output_mce[:, -1] = sol.x
+        with nostdout():
+            sol = linprog(c, A_eq=A_eq, b_eq=b_eq,
+                          method='interior-point', bounds=(0, None),
+                          options={'disp': False})
+        output_mce[:, :] = sol.x[:, np.newaxis]
+
         self.output = output_mce
         self.sol = sol
         return Q, A_eq, data_slice, b_eq, c
