@@ -75,7 +75,7 @@ def read_fif_data(file_path, time_axis, start_s: int=0, stop_s: int=None):
 def read_edf_data(file_path, time_axis, start_s: int=0, stop_s: int=None):
     raw = mne.io.edf.read_raw_edf(input_fname=file_path, preload=True,
                                   verbose='ERROR', stim_channel=-1,
-                                  misc=[129,130,131])  # type: mne.io.Raw
+                                  misc=[128, 129, 130])  # type: mne.io.Raw
     try:
         del raw._cals  # fixes bug with pick_types in edf data
     except:
@@ -84,7 +84,8 @@ def read_edf_data(file_path, time_axis, start_s: int=0, stop_s: int=None):
     # Get the required time slice.
     # mne.io.Raw.get_data takes array indices, not time
     start = 0 if start_s is None else raw.time_as_index(start_s)[0]
-    stop = min(raw.n_times if stop_s is None else raw.time_as_index(stop_s)[0], raw.n_times)
+    stop = min(raw.n_times if stop_s is None else raw.time_as_index(stop_s)[0],
+               raw.n_times)
     data = raw.get_data(start=start, stop=stop)
 
     mne_info = raw.info.copy()
