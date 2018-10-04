@@ -11,7 +11,7 @@ Inverse-modelling-related capabilities of cognigraph
 conda create -n cognigraph python=3.5.3 pyqt=5 pyqtgraph ipython scipy numba sympy sklearn pandas matplotlib
 activate cognigraph
 pip install pylsl expyriment
-conda install -c conda-forge mne=0.15
+conda install -c conda-forge mne
 ```
 
 2. **Репозиторий.** Часть зависимостей организована через подмодули git. Для
