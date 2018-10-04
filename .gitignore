@@ -110,3 +110,5 @@ docs/_templates
 *.edf
 *.png
 *.gif
+
+tests/data
