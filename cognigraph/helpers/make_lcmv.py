@@ -1,16 +1,82 @@
 import numpy as np
 from copy import deepcopy
 from numpy import linalg  # works faster than scipy on anaconda
+from numpy.linalg import norm
+from numba import jit
 
-from mne.io.pick import (pick_types, pick_channels_forward, pick_channels_cov, pick_info)
+from mne.io.pick import pick_channels_cov
 from mne.cov import compute_whitener
 from mne.source_space import label_src_vertno_sel
 from mne.io.constants import FIFF
 from mne.minimum_norm.inverse import _get_vertno
 from mne.io.proj import make_projector
-from mne.channels.channels import _contains_ch_type
 from mne.utils import warn, estimate_rank
-from loop_backup import beam_loop
+
+
+def stacked_power_iteration(A, n_iter=10, abs_tol=1e-6):
+    """Vectorized power iterations for a batch of stacked 3x3 matrices"""
+    n_src = int(A.shape[0] / 3)
+
+    # Choose a random vector to decrease the chance that our vector
+    # Is orthogonal to the eigenvector
+    b1 = np.random.rand(n_src)
+    b2 = np.random.rand(n_src)
+    b3 = np.random.rand(n_src)
+
+    A1 = np.ascontiguousarray(A[:, 0].reshape([n_src, 3]).T)
+    A2 = np.ascontiguousarray(A[:, 1].reshape([n_src, 3]).T)
+    A3 = np.ascontiguousarray(A[:, 2].reshape([n_src, 3]).T)
+
+    sol = np.zeros_like(A1)
+    sol_prev = np.ones_like(A1)
+
+    i_step = 0
+    while norm(sol_prev - sol, ord='fro') > abs_tol and i_step < n_iter:
+        # calculate matrix-by-vector product Ab for stacked matrices
+        sol_prev = sol
+        sol = A1 * b1 + A2 * b2 + A3 * b3
+        b_norm = np.linalg.norm(sol, axis=0)
+        sol /= b_norm
+        b1 = sol[0, :]
+        b2 = sol[1, :]
+        b3 = sol[2, :]
+        i_step += 1
+    return sol.flatten('F')
+
+
+@jit(nopython=True, cache=True, fastmath=True)
+def _beam_loop(n_sources, W, G, n_orient, TMP):
+    tmp_prod = np.empty((3 * n_sources, 3))
+    for k in range(n_sources):
+        Wk = W[n_orient * k: n_orient * k + n_orient, :]
+        Gk = G[:, n_orient * k: n_orient * k + n_orient]
+        tmp = np.dot(TMP[n_orient * k: n_orient * k + n_orient, :], Gk)
+        tmp_1 = np.dot(Wk, Gk)
+        tmp_prod_temp = linalg.solve(tmp, tmp_1)
+        tmp_prod[n_orient * k: n_orient * (k + 1), :] = tmp_prod_temp
+    return tmp_prod
+
+
+def multiply_by_orientations_rowwise(A, m):
+    """
+    For [3 * m, n] matrix A and [3 * m] vector m
+    perform blockwise right matrix multiplication.
+
+    """
+    A_tmp = np.expand_dims(m, axis=1) * A
+    A = A_tmp[::3, :] + A_tmp[1::3, :] + A_tmp[2::3, :]
+    return A
+
+
+def multiply_by_orientations_columnwise(A, m):
+    """
+    For [m, 3 * n] matrix A and [3 * n] vector m
+    perform blockwise left matrix multiplication.
+
+    """
+    A_tmp = A * m
+    A = A_tmp[:, ::3] + A_tmp[:, 1::3] + A_tmp[:, 2::3]
+    return A
 
 
 def _reg_pinv(x, reg):
@@ -26,30 +92,6 @@ def _reg_pinv(x, reg):
     d = reg * np.trace(x) / len(x)
     x.flat[::x.shape[0] + 1] += d
     return linalg.pinv(x), d
-
-
-def _eig_inv(x, rank):
-    """Compute a pseudoinverse with smallest component set to zero."""
-    U, s, V = linalg.svd(x)
-
-    # pseudoinverse is computed by setting eigenvalues not included in
-    # signalspace to zero
-    s_inv = np.zeros(s.shape)
-    s_inv[:rank] = 1. / s[:rank]
-
-    x_inv = np.dot(V.T, s_inv[:, np.newaxis] * U.T)
-    return x_inv
-
-
-def _check_one_ch_type(info, picks, noise_cov):
-    """Check number of sensor types and presence of noise covariance matrix."""
-    info_pick = pick_info(info, sel=picks)
-    ch_types =\
-        [_contains_ch_type(info_pick, tt) for tt in ('mag', 'grad', 'eeg')]
-    if sum(ch_types) > 1 and noise_cov is None:
-        raise ValueError('Source reconstruction with several sensor types '
-                         'requires a noise covariance matrix to be '
-                         'able to apply whitening.')
 
 
 def _prepare_beamformer_input(info, forward, label, picks, pick_ori):
@@ -123,17 +165,6 @@ def _setup_picks(info, forward, data_cov=None, noise_cov=None):
 
     # handle channels from forward model and info:
     ch_names = _compare_ch_names(info['ch_names'], fwd_ch_names, info['bads'])
-
-    # inform about excluding channels:
-    # if (data_cov is not None and set(info['bads']) != set(data_cov['bads']) and
-    #         (len(set(ch_names).intersection(data_cov['bads'])) > 0)):
-    #     logger.info('info["bads"] and data_cov["bads"] do not match, '
-    #                 'excluding bad channels from both.')
-    # if (noise_cov is not None and
-    #         set(info['bads']) != set(noise_cov['bads']) and
-    #         (len(set(ch_names).intersection(noise_cov['bads'])) > 0)):
-    #     logger.info('info["bads"] and noise_cov["bads"] do not match, '
-    #                 'excluding bad channels from both.')
 
     # handle channels from data cov if data cov is not None
     # Note: data cov is supposed to be None in tf_lcmv
@@ -280,8 +311,23 @@ def make_lcmv(info, forward, data_cov, reg=0.05, noise_cov=None, label=None,
 
     # Compute spatial filters
     W = np.dot(G.T, Cm_inv)
-    W, is_free_ori = beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori,
-                               pick_ori, weight_norm, reduce_rank, noise)
+    n_orient = 3 if is_free_ori else 1
+    n_sources = G.shape[1] // n_orient
+    TMP = np.dot(G.T, Cm_inv_sq)
+    G = np.asfortranarray(G)
+    max_ori = np.empty(n_orient * n_sources, order='F')
+    pwr = np.empty(n_sources, order='F')
+
+    tmp_prod = _beam_loop(n_sources, W, G, n_orient, TMP)
+    max_ori = stacked_power_iteration(tmp_prod)
+    W = multiply_by_orientations_rowwise(W, max_ori)
+    G_or = multiply_by_orientations_columnwise(G, max_ori)
+    TMP_or = multiply_by_orientations_rowwise(TMP, max_ori)
+    pwr = np.array([TMP_or[k, :] @ G_or[:, k] for k in range(n_sources)])
+
+    denom = np.sqrt(pwr)
+    W /= np.expand_dims(denom, axis=1)
+    is_free_ori = False
 
     filters = dict(weights=W, data_cov=data_cov, noise_cov=noise_cov,
                    whitener=whitener, weight_norm=weight_norm,
