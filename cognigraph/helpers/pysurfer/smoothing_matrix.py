@@ -55,9 +55,11 @@ def smoothing_matrix(vertices, adj_mat, smoothing_steps=20, verbose=None):
             break
 
     # Make sure the smoothing matrix has the right number of rows
-    # and is in COO format
-    smooth_mat = smooth_mat.tocoo()
-    smooth_mat = sparse.coo_matrix((smooth_mat.data,
+    # and is in CSR format
+    # Original freesurfer function uses COO, but with CSR matrix-vector
+    # multiplication is faster
+    smooth_mat = smooth_mat.tocoo()  # this is supposed to be coo
+    smooth_mat = sparse.csr_matrix((smooth_mat.data,
                                     (idx_use[smooth_mat.row],
                                      smooth_mat.col)),
                                    shape=(n_vertices,

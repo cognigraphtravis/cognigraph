@@ -218,8 +218,6 @@ class BrainPainter(QObject):
         self.draw_sig.connect(self.on_draw)
 
     def initialize(self, mne_forward_model_file_path):
-        self.smoothing_matrix = self._get_smoothing_matrix(
-            mne_forward_model_file_path)
 
         self.background_colors = self._calculate_background_colors(
             self.show_curvature)
@@ -232,22 +230,17 @@ class BrainPainter(QObject):
         if self.widget is None:
             self.mesh_data = self._get_mesh_data_from_surfaces_dir()
             self.widget = self._create_widget()
+        self.smoothing_matrix = self._get_smoothing_matrix(
+            mne_forward_model_file_path)
         # else:  # Do not recreate the widget, just clear it
         #     for item in self.widget.items:
         #         self.widget.removeItem(item)
 
     def on_draw(self, normalized_values):
-        now = time.time()
-
-        # if (now - self.time_since_draw) >= 0.01:  # Redraw only at 10Hz
-        self.time_since_draw = now
 
         sources_smoothed = self.smoothing_matrix.dot(normalized_values)
-        colors = self.data_colormap(sources_smoothed)
         threshold = self.threshold_pct / 100
         mask = sources_smoothed <= threshold
-        colors[mask] = self.background_colors[mask]
-        colors[~mask] *= self.background_colors[~mask, 0, np.newaxis]
 
         # reset colors to white
         self.mesh_data._alphas[:, :] = 0.
@@ -314,7 +307,7 @@ class BrainPainter(QObject):
         faces = np.r_[left_hemi['use_tris'], lh_vertex_cnt + right_hemi['use_tris']]
         sources_idx = np.r_[left_hemi['vertno'], lh_vertex_cnt + right_hemi['vertno']]
 
-        return sources_idx, gl.MeshData(vertexes=vertexes, faces=faces)
+        return sources_idx, vertexes, faces
 
     def _create_widget(self):
         # TODO: change to vispy
@@ -397,12 +390,12 @@ class BrainPainter(QObject):
         except FileNotFoundError:
             print('Calculating smoothing matrix.' +
                   ' This might take a while the first time.')
-            sources_idx, _ = self._get_mesh_data_from_forward_solution(
+            sources_idx, vertexes, faces = self._get_mesh_data_from_forward_solution(
                 mne_forward_model_file_path)
-            adj_mat = mesh_edges(self.mesh_data.faces())
-            smoothing_matrix = smoothing_matrix(sources_idx, adj_mat)
-            sparse.save_npz(smoothing_matrix_file_path, smoothing_matrix)
-            return smoothing_matrix
+            adj_mat = mesh_edges(self.mesh_data._faces)
+            smoothing_mat = smoothing_matrix(sources_idx, adj_mat)
+            sparse.save_npz(smoothing_matrix_file_path, smoothing_mat)
+            return smoothing_mat
 
 
 class SignalViewer(OutputNode):
