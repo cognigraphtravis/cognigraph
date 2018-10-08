@@ -38,7 +38,6 @@ def stacked_power_iteration(A):
 
     # ABS_TOL = 1e-6
 
-
     # while np.linalg.norm(temp_prev - temp, ord='fro') > ABS_TOL:
     for _ in range(100):
         # calculate the matrix-by-vector product Ab
@@ -56,92 +55,37 @@ def stacked_power_iteration(A):
     return temp.flatten('F')
 
 
+@jit(nopython=True, cache=True, nogil=True, fastmath=True)
+def _beam_loop(n_sources, W, G, n_orient, TMP):
+    tmp_prod = np.empty((3 * n_sources, 3))
+    for k in range(n_sources):
+        Wk = W[n_orient * k: n_orient * k + n_orient, :]
+        Gk = G[:, n_orient * k: n_orient * k + n_orient]
+        tmp = np.dot(TMP[n_orient * k: n_orient * k + n_orient, :], Gk)
+        tmp_1 = np.dot(Wk, Gk)
+        tmp_prod_temp = linalg.solve(tmp, tmp_1)
+        tmp_prod[n_orient * k: n_orient * (k + 1), :] = tmp_prod_temp
+    return tmp_prod
+
+
 # @profile
-def beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori, pick_ori, weight_norm, reduce_rank, noise):
+def beam_loop(W, G, Cm_inv_sq, Cm_inv, is_free_ori,
+              pick_ori, weight_norm, reduce_rank, noise):
     # Compute spatial filters
-    # tprev = time()
     n_orient = 3 if is_free_ori else 1
     n_sources = G.shape[1] // n_orient
-    # tprev = time()
-    # TMP = np.dot(G.T, np.dot(Cm_inv_sq, G))
     TMP = np.dot(G.T, Cm_inv_sq)
-    # print('big product: {:.3f}'.format((time() - tprev) * 1000))
     G = np.asfortranarray(G)
-    # W = np.asfortranarray(W)
     max_ori = np.empty(n_orient * n_sources, order='F')
     pwr = np.empty(n_sources, order='F')
-    tmp_prod = np.empty((3 * n_sources, 3))
 
-    # tstart = time()
-    # print('{:.3f}'.format((tstart - tprev) * 1000))
-    for k in range(n_sources):
-        # tprev = time()
-        Wk = W[n_orient * k: n_orient * k + n_orient, :]
-        # print(Wk.shape)
-        # print('29: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        Gk = G[:, n_orient * k: n_orient * k + n_orient]
-        # print('32: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # tmp = np.dot(Gk.T, np.dot(Cm_inv_sq, Gk))
-        tmp = TMP[n_orient * k: n_orient * k + n_orient, :] @ Gk
-        # print('35: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        tmp_1 = np.dot(Wk, Gk)
-        # print('37: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        tmp_prod_temp = linalg._umath_linalg.solve(tmp, tmp_1)
-        tmp_prod[n_orient * k: n_orient * (k + 1), :] = tmp_prod_temp
-        # tmp_prod = linalg._umath_linalg.solve(tmp, tmp_1)
-        # print('38: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # eig_vals, eig_vecs = linalg._umath_linalg.eig(tmp_prod_temp)
-        # eig_vals, eig_vecs = eig_vals.real, eig_vecs.real
-        # import ipdb; ipdb.set_trace()
-        # # print('42: {:.3f}'.format((time() - tprev) * 1000))
-
-        # # tprev = time()
-        # idx_max = eig_vals.argmax()
-        # # print('45: {:.3f}'.format((time() - tprev) * 1000))
-
-        # # tprev = time()
-        # max_ori_temp = eig_vecs[:, idx_max]
-        # pwr[k] = np.dot(max_ori_temp.T, np.dot(tmp, max_ori_temp))
-        # pwr[k] = 1
-        # max_ori[n_orient * k : n_orient * (k + 1)] = max_ori_temp
-        # print('48: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # print('51: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # Gk = np.dot(Gk, max_ori)
-        # print('54: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # tmp = np.dot(Gk.T, np.dot(Cm_inv_sq, Gk))
-        # print('58: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # print('61: {:.3f}'.format((time() - tprev) * 1000))
-
-        # tprev = time()
-        # print('74: {:.3f}'.format((time() - tprev) * 1000))
-    # Wk[:] = np.dot(max_ori, Wk)
+    tmp_prod = _beam_loop(n_sources, W, G, n_orient, TMP)
     max_ori = stacked_power_iteration(tmp_prod)
-    # import ipdb; ipdb.set_trace()
-    # W_tmp = np.expand_dims(max_ori, axis=1) * W
-    # W = W_tmp[::3, :] + W_tmp[1::3, :] + W_tmp[2::3, :]
     W = multiply_by_orientations_rowwise(W, max_ori)
     G_or = multiply_by_orientations_columnwise(G, max_ori)
     TMP_or = multiply_by_orientations_rowwise(TMP, max_ori)
     # pwr_mat = TMP_or @ G_or
-    pwr = np.array([TMP_or[k,:] @ G_or[:,k] for k in range(n_sources)])
+    pwr = np.array([TMP_or[k, :] @ G_or[:, k] for k in range(n_sources)])
     # pwr = np.diag(pwr_mat)
 
     denom = np.sqrt(pwr)
