@@ -1,4 +1,5 @@
 __all__ = ["node", "pipeline"]
+__version__ = '0.1.1'
 
 import numpy as np
 # from .node import Node, SourceNode, OutputNode, ProcessorNode

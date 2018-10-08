@@ -1,9 +1,18 @@
 ''' Config file for setuptools '''
 from setuptools import setup
 
+import os
+VERSION = None
+
+with open(os.path.join('cognigraph', '__init__.py'), 'r') as fid:
+    for line in (line.strip() for line in fid):
+        if line.startswith('__version__'):
+            VERSION = line.split('=')[1].strip().strip('\'')
+            break
+
 setup(
     name='cognigraph',
-    version='0.1.1',
+    version=VERSION,
     install_requires=[
         'pyqtgraph',
         'pyqt5',
@@ -15,10 +24,13 @@ setup(
         'sympy',
         'sklearn',
         'pandas',
-        'numba',
         'nibabel',
         'pyopengl',
         'pillow',
-        'pyscreenshot'
+        'pyscreenshot',
+        'numba',
+        'vispy',
+        'PyOpenGL',
+        'PyOpenGL_accelerate'
     ]
 )
