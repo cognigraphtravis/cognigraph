@@ -32,8 +32,6 @@ from ..helpers.aux_tools import nostdout
 from .. import TIME_AXIS
 from vendor.nfb.pynfb.signal_processing import filters
 
-import logging
-
 
 class Preprocessing(ProcessorNode):
 
@@ -442,12 +440,17 @@ class Beamformer(ProcessorNode):
 
 
     def _update(self):
+        t1 = time.time()
         input_array = self.input_node.output
         raw_array = mne.io.RawArray(
             input_array, self._mne_info, verbose='ERROR')
 
         raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
         raw_array.set_eeg_reference(ref_channels='average', projection=True)
+        t2 = time.time()
+        self.logger.debug(
+                'Prepare arrays in {:.1f} ms'.format(
+                    (t2 - t1) * 1000))
 
         if self.is_adaptive:
             self._update_covariance_matrix(input_array)
@@ -467,13 +470,20 @@ class Beamformer(ProcessorNode):
         # stc = lcmv_raw(raw_array, self.fwd_surf, None, self._Rxx,
         #                pick_ori='max-power', weight_norm='unit-noise-gain',
         #                max_ori_out='signed')
-        stc = apply_lcmv_raw(raw=raw_array, filters=self._filters, max_ori_out='signed')
+        t1 = time.time()
+        stc = apply_lcmv_raw(raw=raw_array, filters=self._filters,
+                             max_ori_out='signed')
+        t2 = time.time()
+        self.logger.debug(
+                'Applied lcmv inverse in {:.1f} ms'.format(
+                    (t2 - t1) * 1000))
 
         # output = put_time_dimension_back_from_second(
         #     kernel.dot(make_time_dimension_second(input_array))
         # )
         output = stc.data
 
+        t1 = time.time()
         if self.fixed_orientation is True:
             if self.output_type == 'power':
                 output = output ** 2
@@ -485,6 +495,10 @@ class Beamformer(ProcessorNode):
                 output = np.sqrt(output)
 
         self.output = output
+        t2 = time.time()
+        self.logger.debug(
+                'Finalized in {:.1f} ms'.format(
+                    (t2 - t1) * 1000))
 
     def _reset(self) -> bool:
 
