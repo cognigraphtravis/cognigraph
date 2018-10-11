@@ -21,7 +21,7 @@ from ..helpers.matrix_functions import (make_time_dimension_second,
                                         put_time_dimension_back_from_second,
                                         last_sample)
 from ..helpers.inverse_model import (get_default_forward_file,
-                                     assemble_gain_matrix,
+                                     get_clean_forward,
                                      make_inverse_operator,
                                      matrix_from_inverse_operator)
 
@@ -34,6 +34,9 @@ from vendor.nfb.pynfb.signal_processing import filters
 
 
 class Preprocessing(ProcessorNode):
+    CHANGES_IN_THESE_REQUIRE_RESET = ('collect_for_x_seconds', )
+    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
+    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
 
     def __init__(self, collect_for_x_seconds: int=60):
         super().__init__()
@@ -49,31 +52,11 @@ class Preprocessing(ProcessorNode):
 
         self._reset_statistics()
 
-    def _on_input_history_invalidation(self):
-        self._reset_statistics()
-
-    def _check_value(self, key, value):
-        pass
-
-    CHANGES_IN_THESE_REQUIRE_RESET = ('collect_for_x_seconds', )
-
     def _initialize(self):
         self.mne_info = self.traverse_back_and_find('mne_info')
         frequency = self.mne_info['sfreq']
         self._samples_to_be_collected = int(math.ceil(
             self.collect_for_x_seconds * frequency))
-
-    def _reset(self) -> bool:
-        self._reset_statistics()
-        self._input_history_is_no_longer_valid = True
-        return self._input_history_is_no_longer_valid
-
-    def _reset_statistics(self):
-        self._samples_collected = 0
-        self._enough_collected = False
-        self._means = 0
-        self._mean_sums_of_squares = 0
-        self._bad_channel_indices = []
 
     def _update(self):
         # Have we collected enough samples without the new input?
@@ -100,6 +83,18 @@ class Preprocessing(ProcessorNode):
 
         self.output = self.input_node.output
 
+    def _reset(self) -> bool:
+        self._reset_statistics()
+        self._input_history_is_no_longer_valid = True
+        return self._input_history_is_no_longer_valid
+
+    def _reset_statistics(self):
+        self._samples_collected = 0
+        self._enough_collected = False
+        self._means = 0
+        self._mean_sums_of_squares = 0
+        self._bad_channel_indices = []
+
     def _update_statistics(self):
         input_array = self.input_node.output.astype(np.dtype('float64'))
         # Using float64 is necessary because otherwise rounding error
@@ -119,8 +114,11 @@ class Preprocessing(ProcessorNode):
         return np.sqrt(
             n / (n - 1) * (self._mean_sums_of_squares - self._means ** 2))
 
-    UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
-    SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info': channel_labels_saver}
+    def _on_input_history_invalidation(self):
+        self._reset_statistics()
+
+    def _check_value(self, key, value):
+        pass
 
 
 class InverseModel(ProcessorNode):
@@ -138,9 +136,50 @@ class InverseModel(ProcessorNode):
         self._user_provided_forward_model_file_path = forward_model_path
         self._default_forward_model_file_path = None
         self.mne_info = None
+        self.fwd = None
 
         self._inverse_model_matrix = None
         self.method = method
+
+    def _initialize(self):
+        mne_info = self.traverse_back_and_find('mne_info')
+        self._bad_channels = mne_info['bads']
+
+        if self._user_provided_forward_model_file_path is None:
+            self._default_forward_model_file_path =\
+                get_default_forward_file(mne_info)
+
+        self.fwd, missing_ch_names = get_clean_forward(
+            self.mne_forward_model_file_path, mne_info)
+        mne_info['bads'] = list(set(mne_info['bads'] + missing_ch_names))
+
+        inverse_operator = make_inverse_operator(self.fwd, mne_info)
+        self._inverse_model_matrix = matrix_from_inverse_operator(
+            inverse_operator=inverse_operator, mne_info=mne_info,
+            snr=self.snr, method=self.method)
+
+        frequency = mne_info['sfreq']
+        # channel_count = self._inverse_model_matrix.shape[0]
+        channel_count = self.fwd['nsource']
+        channel_labels = ['vertex #{}'.format(i + 1)
+                          for i in range(channel_count)]
+        self.mne_info = mne.create_info(channel_labels, frequency)
+
+    def _update(self):
+        mne_info = self.traverse_back_and_find('mne_info')
+        bads = mne_info['bads']
+        if bads != self._bad_channels:
+            inverse_operator = make_inverse_operator(self.fwd, mne_info)
+            self._inverse_model_matrix = matrix_from_inverse_operator(
+                inverse_operator=inverse_operator, mne_info=mne_info,
+                snr=self.snr, method=self.method)
+            self._bad_channels = bads
+
+        input_array = self.input_node.output
+        raw_array = mne.io.RawArray(input_array, mne_info, verbose='ERROR')
+        raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
+        data = raw_array.get_data()
+        self.output = self._apply_inverse_model_matrix(data)
 
     def _on_input_history_invalidation(self):
         # The methods implemented in this node do not rely on past inputs
@@ -174,91 +213,17 @@ class InverseModel(ProcessorNode):
         # This setter is for public use, hence the "user_provided"
         self._user_provided_forward_model_file_path = value
 
-    def _update(self):
-        mne_info = self.traverse_back_and_find('mne_info')
-        bads = mne_info['bads']
-        if bads != self._bad_channels:
-            inverse_operator = make_inverse_operator(
-                self.mne_forward_model_file_path, mne_info)
-            self._inverse_model_matrix = matrix_from_inverse_operator(
-                inverse_operator=inverse_operator, mne_info=mne_info,
-                snr=self.snr, method=self.method)
-            self._bad_channels = bads
-
-        input_array = self.input_node.output
-        raw_array = mne.io.RawArray(input_array, mne_info, verbose='ERROR')
-        raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
-        data = raw_array.get_data()
-        self.output = self._apply_inverse_model_matrix(data)
-
     def _apply_inverse_model_matrix(self, input_array: np.ndarray):
         W = self._inverse_model_matrix  # VERTICES x CHANNELS
         output_array = W.dot(make_time_dimension_second(input_array))
         return put_time_dimension_back_from_second(output_array)
 
-    def _initialize(self):
-        mne_info = self.traverse_back_and_find('mne_info')
-        self._bad_channels = mne_info['bads']
-
-        if self._user_provided_forward_model_file_path is None:
-            self._default_forward_model_file_path =\
-                get_default_forward_file(mne_info)
-
-        G = assemble_gain_matrix(self.mne_forward_model_file_path, mne_info)
-        self._gain_matrix = G
-
-        inverse_operator = make_inverse_operator(
-            self.mne_forward_model_file_path, mne_info)
-        self._inverse_model_matrix = matrix_from_inverse_operator(
-            inverse_operator=inverse_operator, mne_info=mne_info,
-            snr=self.snr, method=self.method)
-
-        frequency = mne_info['sfreq']
-        # channel_count = self._inverse_model_matrix.shape[0]
-        channel_count = G.shape[1]
-        channel_labels = ['vertex #{}'.format(i + 1)
-                          for i in range(channel_count)]
-        self.mne_info = mne.create_info(channel_labels, frequency)
-
 
 class LinearFilter(ProcessorNode):
-
-    def _on_input_history_invalidation(self):
-        if self._linear_filter is not None:
-            self._linear_filter.reset()
-
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ('mne_info', )
     CHANGES_IN_THESE_REQUIRE_RESET = ('lower_cutoff', 'upper_cutoff')
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info':
                                            lambda info: (info['nchan'], )}
-
-    def _check_value(self, key, value):
-        if value is None:
-            pass
-
-        elif key == 'lower_cutoff':
-            if (hasattr(self, 'upper_cutoff') and
-                    self.upper_cutoff is not None and
-                    value > self.upper_cutoff):
-                raise ValueError(
-                    'Lower cutoff can`t be set higher that the upper cutoff')
-            if value < 0:
-                raise ValueError('Lower cutoff must be a positive number')
-
-        elif key == 'upper_cutoff':
-            if (hasattr(self, 'upper_cutoff') and
-                    self.lower_cutoff is not None and
-                    value < self.lower_cutoff):
-                raise ValueError(
-                    'Upper cutoff can`t be set lower that the lower cutoff')
-            if value < 0:
-                raise ValueError('Upper cutoff must be a positive number')
-
-    def _reset(self):
-        self._should_reinitialize = True
-        self.initialize()
-        output_history_is_no_longer_valid = True
-        return output_history_is_no_longer_valid
 
     def __init__(self, lower_cutoff, upper_cutoff):
         super().__init__()
@@ -288,8 +253,56 @@ class LinearFilter(ProcessorNode):
         else:
             self.output = input
 
+    def _check_value(self, key, value):
+        if value is None:
+            pass
+
+        elif key == 'lower_cutoff':
+            if (hasattr(self, 'upper_cutoff') and
+                    self.upper_cutoff is not None and
+                    value > self.upper_cutoff):
+                raise ValueError(
+                    'Lower cutoff can`t be set higher that the upper cutoff')
+            if value < 0:
+                raise ValueError('Lower cutoff must be a positive number')
+
+        elif key == 'upper_cutoff':
+            if (hasattr(self, 'upper_cutoff') and
+                    self.lower_cutoff is not None and
+                    value < self.lower_cutoff):
+                raise ValueError(
+                    'Upper cutoff can`t be set lower that the lower cutoff')
+            if value < 0:
+                raise ValueError('Upper cutoff must be a positive number')
+
+    def _on_input_history_invalidation(self):
+        if self._linear_filter is not None:
+            self._linear_filter.reset()
+
+    def _reset(self):
+        self._should_reinitialize = True
+        self.initialize()
+        output_history_is_no_longer_valid = True
+        return output_history_is_no_longer_valid
+
 
 class EnvelopeExtractor(ProcessorNode):
+    def __init__(self, factor=0.9):
+        super().__init__()
+        self.method = 'Exponential smoothing'
+        self.factor = factor
+        self._envelope_extractor = None  # type: ExponentialMatrixSmoother
+
+    def _initialize(self):
+        channel_count = self.traverse_back_and_find('mne_info')['nchan']
+        self._envelope_extractor = ExponentialMatrixSmoother(
+            factor=self.factor, column_count=channel_count)
+        self._envelope_extractor.apply = pynfb_ndarray_function_wrapper(
+            self._envelope_extractor.apply)
+
+    def _update(self):
+        input = self.input_node.output
+        self.output = self._envelope_extractor.apply(np.abs(input))
 
     def _check_value(self, key, value):
         if key == 'factor':
@@ -316,23 +329,6 @@ class EnvelopeExtractor(ProcessorNode):
     SUPPORTED_METHODS = ('Exponential smoothing', )
     SAVERS_FOR_UPSTREAM_MUTABLE_OBJECTS = {'mne_info':
                                            lambda info: (info['nchan'],)}
-
-    def __init__(self, factor=0.9):
-        super().__init__()
-        self.method = 'Exponential smoothing'
-        self.factor = factor
-        self._envelope_extractor = None  # type: ExponentialMatrixSmoother
-
-    def _initialize(self):
-        channel_count = self.traverse_back_and_find('mne_info')['nchan']
-        self._envelope_extractor = ExponentialMatrixSmoother(
-            factor=self.factor, column_count=channel_count)
-        self._envelope_extractor.apply = pynfb_ndarray_function_wrapper(
-            self._envelope_extractor.apply)
-
-    def _update(self):
-        input = self.input_node.output
-        self.output = self._envelope_extractor.apply(np.abs(input))
 
 
 class Beamformer(ProcessorNode):
@@ -368,17 +364,6 @@ class Beamformer(ProcessorNode):
         self.forgetting_factor_per_second = forgetting_factor_per_second
         self._forgetting_factor_per_sample = None  # type: float
 
-    @property
-    def mne_forward_model_file_path(self):
-        # TODO: fix this
-        return (self._user_provided_forward_model_file_path or
-                self._default_forward_model_file_path)
-
-    @mne_forward_model_file_path.setter
-    def mne_forward_model_file_path(self, value):
-        # This setter is for public use, hence the "user_provided"
-        self._user_provided_forward_model_file_path = value
-
     def _initialize(self):
         mne_info = self.traverse_back_and_find('mne_info')
 
@@ -387,47 +372,37 @@ class Beamformer(ProcessorNode):
                     mne_info)
 
         try:
-            self._gain_matrix, self._channel_indices = assemble_gain_matrix(
-                    self.mne_forward_model_file_path, mne_info,
-                    drop_missing=True, force_fixed=self.fixed_orientation)
+            fwd, missing_ch_names = get_clean_forward(
+                self.mne_forward_model_file_path, mne_info)
         except ValueError:
             raise Exception('BAD FORWARD + DATA COMBINATION!')
 
+        mne_info['bads'] = list(set(mne_info['bads'] + missing_ch_names))
+        self._gain_matrix = fwd['sol']['data']
         G = self._gain_matrix
         if self.is_adaptive is False:
             Rxx = G.dot(G.T)
         elif self.is_adaptive is True:
             Rxx = np.zeros([G.shape[0], G.shape[0]])  # G.dot(G.T)
 
-        ch_names = np.array(mne_info['ch_names'])[mne.pick_types(
-            mne_info, eeg=True, meg=False)]
-        ch_names = list(ch_names)
+        goods = mne.pick_types(mne_info, eeg=True, meg=False, exclude='bads')
+        ch_names = [mne_info['ch_names'][i] for i in goods]
 
         self._Rxx = mne.Covariance(Rxx, ch_names, mne_info['bads'],
                                    mne_info['projs'], nfree=1)
 
         self._mne_info = mne_info
 
-        # Optimization
-        if not self._gain_matrix.flags['F_CONTIGUOUS']:
-            self._gain_matrix = np.asfortranarray(self._gain_matrix)
-
         frequency = mne_info['sfreq']
         self._forgetting_factor_per_sample = np.power(
                 self.forgetting_factor_per_second, 1 / frequency)
 
-        if self.fixed_orientation is True:
-            vertex_count = self._gain_matrix.shape[1]
-        else:
-            vertex_count = int(self._gain_matrix.shape[1] / 3)
-        channel_labels =\
-            ['vertex #{}'.format(i + 1) for i in range(vertex_count)]
+        n_vert = fwd['nsource']
+        channel_labels = ['vertex #{}'.format(i + 1) for i in range(n_vert)]
         self.mne_info = mne.create_info(channel_labels, frequency)
-
         self._initialized_as_adaptive = self.is_adaptive
         self._initialized_as_fixed = self.fixed_orientation
 
-        fwd = mne.read_forward_solution(self.mne_forward_model_file_path)
         self.fwd_surf = mne.convert_forward_solution(
                     fwd, surf_ori=True, force_fixed=False)
         if not self.is_adaptive:
@@ -438,7 +413,6 @@ class Beamformer(ProcessorNode):
         else:
             self._filters = None
 
-
     def _update(self):
         t1 = time.time()
         input_array = self.input_node.output
@@ -448,8 +422,7 @@ class Beamformer(ProcessorNode):
         raw_array.pick_types(eeg=True, meg=False, stim=False, exclude='bads')
         raw_array.set_eeg_reference(ref_channels='average', projection=True)
         t2 = time.time()
-        self.logger.debug(
-                'Prepare arrays in {:.1f} ms'.format(
+        self.logger.debug('Prepare arrays in {:.1f} ms'.format(
                     (t2 - t1) * 1000))
 
         if self.is_adaptive:
@@ -462,35 +435,26 @@ class Beamformer(ProcessorNode):
                                       weight_norm='unit-noise-gain',
                                       reduce_rank=False)
             t2 = time.time()
-            self.logger.debug(
-                    'Assembled lcmv instance in {:.1f} ms'.format(
+            self.logger.debug('Assembled lcmv instance in {:.1f} ms'.format(
                         (t2 - t1) * 1000))
 
         self._filters['source_nn'] = []
-        # stc = lcmv_raw(raw_array, self.fwd_surf, None, self._Rxx,
-        #                pick_ori='max-power', weight_norm='unit-noise-gain',
-        #                max_ori_out='signed')
         t1 = time.time()
         stc = apply_lcmv_raw(raw=raw_array, filters=self._filters,
                              max_ori_out='signed')
         t2 = time.time()
-        self.logger.debug(
-                'Applied lcmv inverse in {:.1f} ms'.format(
+        self.logger.debug('Applied lcmv inverse in {:.1f} ms'.format(
                     (t2 - t1) * 1000))
 
-        # output = put_time_dimension_back_from_second(
-        #     kernel.dot(make_time_dimension_second(input_array))
-        # )
         output = stc.data
-
         t1 = time.time()
         if self.fixed_orientation is True:
             if self.output_type == 'power':
                 output = output ** 2
         else:
-            vertex_count = int(self._gain_matrix.shape[1] / 3)
-            output = np.sum(np.power(output, 2).reshape((vertex_count, 3, -1)),
-                            axis=1)
+            vertex_count = self.fwd_surf['nsource']
+            output = np.sum(
+                np.power(output, 2).reshape((vertex_count, 3, -1)), axis=1)
             if self.output_type == 'activation':
                 output = np.sqrt(output)
 
@@ -499,6 +463,17 @@ class Beamformer(ProcessorNode):
         self.logger.debug(
                 'Finalized in {:.1f} ms'.format(
                     (t2 - t1) * 1000))
+
+    @property
+    def mne_forward_model_file_path(self):
+        # TODO: fix this
+        return (self._user_provided_forward_model_file_path or
+                self._default_forward_model_file_path)
+
+    @mne_forward_model_file_path.setter
+    def mne_forward_model_file_path(self, value):
+        # This setter is for public use, hence the "user_provided"
+        self._user_provided_forward_model_file_path = value
 
     def _reset(self) -> bool:
 
@@ -557,16 +532,14 @@ class Beamformer(ProcessorNode):
         t3 = time.time()
         self.logger.debug(
             'Updated matrix data in {:.2f} ms'.format((t3 - t2) * 1000))
-        ch_names = np.array(
-            self._mne_info['ch_names'])[mne.pick_types(self._mne_info,
-                                                       eeg=True, meg=False,
-                                                       exclude='bads')]
-        self._Rxx = mne.Covariance(new_Rxx_data, ch_names,
+
+        self._Rxx = mne.Covariance(new_Rxx_data, self._Rxx.ch_names,
                                    raw_array.info['bads'],
                                    raw_array.info['projs'], nfree=1)
         t4 = time.time()
         self.logger.debug('Created instance of covariance' +
                           ' in {:.2f} ms'.format((t4 - t4) * 1000))
+
 
 # TODO: implement this function
 def pynfb_filter_based_processor_class(pynfb_filter_class):
@@ -627,16 +600,6 @@ class MCE(ProcessorNode):
     UPSTREAM_CHANGES_IN_THESE_REQUIRE_REINITIALIZATION = ()
     CHANGES_IN_THESE_REQUIRE_RESET = ('mne_forward_model_file_path', 'snr')
 
-    def _on_input_history_invalidation(self):
-        # The methods implemented in this node do not rely on past inputs
-        pass
-
-    def _reset(self):
-        self._should_reinitialize = True
-        self.initialize()
-        output_history_is_no_longer_valid = True
-        return output_history_is_no_longer_valid
-
     def __init__(self, snr=1.0, forward_model_path=None, n_comp=40):
         super().__init__()
         self.snr = snr
@@ -650,7 +613,9 @@ class MCE(ProcessorNode):
         mne_info = self.traverse_back_and_find('mne_info')
         # mne_info['custom_ref_applied'] = True
         # -------- truncated svd for fwd_opr operator -------- #
-        fwd = mne.read_forward_solution(self.mne_forward_model_file_path)
+        fwd, missing_ch_names = get_clean_forward(
+            self.mne_forward_model_file_path, mne_info)
+        mne_info['bads'] = list(set(mne_info['bads'] + missing_ch_names))
         fwd_fix = mne.convert_forward_solution(
                 fwd, surf_ori=True, force_fixed=False)
 
@@ -687,12 +652,6 @@ class MCE(ProcessorNode):
         self.mne_info = mne_info
         self.Sn = Sn
         self.V = V
-
-    def _check_value(self, key, value):
-        if key == 'snr':
-            if value <= 0:
-                raise ValueError(
-                    'snr (signal-to-noise ratio) must be a positive number.')
 
     def _update(self):
         input_array = self.input_node.output
@@ -732,6 +691,22 @@ class MCE(ProcessorNode):
         self.output = output_mce
         self.sol = sol
         return Q, A_eq, data_slice, b_eq, c
+
+    def _on_input_history_invalidation(self):
+        # The methods implemented in this node do not rely on past inputs
+        pass
+
+    def _reset(self):
+        self._should_reinitialize = True
+        self.initialize()
+        output_history_is_no_longer_valid = True
+        return output_history_is_no_longer_valid
+
+    def _check_value(self, key, value):
+        if key == 'snr':
+            if value <= 0:
+                raise ValueError(
+                    'snr (signal-to-noise ratio) must be a positive number.')
 
 
 class ICARejection(ProcessorNode):

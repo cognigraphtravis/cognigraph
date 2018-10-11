@@ -92,8 +92,7 @@ def get_default_forward_file(mne_info: mne.Info):
             return standard_1005_forward_file_path
 
 
-def assemble_gain_matrix(forward_model_path: str, mne_info: mne.Info,
-                         force_fixed=True, drop_missing=False):
+def get_clean_forward(forward_model_path: str, mne_info: mne.Info):
     """
     Assemble the gain matrix from the forward model so that
     its rows correspond to channels in mne_info
@@ -110,38 +109,29 @@ def assemble_gain_matrix(forward_model_path: str, mne_info: mne.Info,
     channels in mne_info (well, depending on drop_missing).
     It drop_missing is True, then also returns indices of
     channels that are both in the forward solution and mne_info
+
     """
 
     # Get the gain matrix from the forward solution
     forward = mne.read_forward_solution(forward_model_path, verbose='ERROR')
-    if force_fixed is True:
-        mne.convert_forward_solution(forward, force_fixed=force_fixed,
-                                     copy=False, verbose='ERROR')
-
-    G_forward = forward['sol']['data']
 
     # Take only the channels present in mne_info
-    channel_labels_upper = all_upper(mne_info['ch_names'])
-    channel_labels_forward = all_upper(forward['info']['ch_names'])
+    ch_names = mne_info['ch_names']
+    goods = mne.pick_types(mne_info, eeg=True, stim=False, eog=False,
+                           ecg=False, exclude='bads')
+    ch_names_data = [ch_names[i] for i in goods]
+    ch_names_fwd = forward['info']['ch_names']
     # Take only channels from both mne_info and the forward solution
-    if drop_missing is True:
-        channel_labels_intersection = [label for label in channel_labels_upper
-                                       if label in channel_labels_forward]
+    ch_names_intersect = [n for n in ch_names_fwd if
+                          n.upper() in all_upper(ch_names_data)]
+    missing_ch_names = [n for n in ch_names_data if
+                        n.upper() not in all_upper(ch_names_fwd)]
 
-        channel_indices = [channel_labels_upper.index(label)
-                           for label in channel_labels_intersection]
-        return (_pick_columns_from_matrix(G_forward.T,
-                                          channel_labels_intersection,
-                                          channel_labels_forward).T,
-                channel_indices)
-
-    else:
-        return _pick_columns_from_matrix(G_forward.T,
-                                         channel_labels_upper,
-                                         channel_labels_forward).T
+    fwd = mne.pick_channels_forward(forward, include=ch_names_intersect)
+    return fwd, missing_ch_names
 
 
-def make_inverse_operator(forward_model_file_path, mne_info, sigma2=1):
+def make_inverse_operator(fwd, mne_info, sigma2=1):
     # sigma2 is what will be used to scale the identity covariance matrix.
     # This will not affect MNE solution though.
     # The inverse operator will use channels common to
@@ -150,21 +140,12 @@ def make_inverse_operator(forward_model_file_path, mne_info, sigma2=1):
     picks = mne.pick_types(mne_info, eeg=True, meg=False, exclude='bads')
     info_goods = mne.pick_info(mne_info, sel=picks)
 
-    forward = mne.read_forward_solution(forward_model_file_path,
-                                        verbose='ERROR')
-
-    forward_goods = mne.pick_channels_forward(forward,
-                                              include=info_goods['ch_names'],
-                                              verbose='ERROR')
-
-    G = forward_goods['sol']['data']
-    N_SEN = G.shape[0]
+    N_SEN = fwd['nchan']
     ch_names = info_goods['ch_names']
     cov_data = np.identity(N_SEN)
-    cov = mne.Covariance(
-            cov_data, ch_names, mne_info['bads'],
-            mne_info['projs'], nfree=1)
-    inv = mne.minimum_norm.make_inverse_operator(info_goods, forward_goods,
-                                                 cov, depth=None, loose=0,
+    cov = mne.Covariance(cov_data, ch_names, mne_info['bads'],
+                         mne_info['projs'], nfree=1)
+    inv = mne.minimum_norm.make_inverse_operator(info_goods, fwd, cov,
+                                                 depth=None, loose=0,
                                                  fixed=True, verbose='ERROR')
     return inv
