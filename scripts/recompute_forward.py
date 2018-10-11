@@ -11,20 +11,26 @@ logging.basicConfig(level=logging.INFO,
                     format='%(levelname)s: %(message)s')
 # ------------------------ define argparse arguments ------------------------ #
 parser = argparse.ArgumentParser(
-    description= 'Recompute forward model for new channel locations ' +
+    description='Recompute forward model for new channel locations ' +
     'based on coregistration ')
 
-parser.add_argument('channels', type=argparse.FileType('r'),
-                    help='File with tab-separated channel locations')
 parser.add_argument('forward', type=argparse.FileType('r'),
                     help='Path to forward solution')
-parser.add_argument('trans', type=argparse.FileType('r'),
-                    help='Path to trans file')
-parser.add_argument('subject_name',# required=True,
+parser.add_argument('subject_name',  # required=True,
                     help='Subject name in FreeSurfer folder')
+parser.add_argument('-t', '--trans', type=argparse.FileType('r'),
+                    default=None,
+                    help='Path to trans file')
 parser.add_argument('-s', '--subjects-dir', default=os.getenv('SUBJECTS_DIR'),
                     help='Path to Freesurfer`s SUBJECTS_DIR.' +
                     ' Defaults to env variable with the same name')
+parser.add_argument('-c', '--channels', type=argparse.FileType('r'),
+                    help='File with tab-separated channel locations')
+parser.add_argument('-o', '--spacing',
+                    choices=['oct5', 'ico4', 'oct6', 'ico6'], default=None,
+                    help='Spacing for sources; oct5=1026, ico4=2562,' +
+                    ' oct6=4098, ico6=10242 sources per hemisphere\n;' +
+                    'If not set, use source space defined in forward')
 parser.add_argument('-d', '--dest',
                     default='{}-fwd.fif'.format(time.strftime("%d_%m_%y")),
                     help='Destination file')
@@ -100,36 +106,49 @@ def write_forward_prompted(fwd_savename, fwd, overwrite):
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    # ---------------------- read channels locations ---------------------- #
-    logging.info('Reading channels locations ...')
-    ch_names, ch_locs = parse_channels_file(args.channels.name, args.padding)
-    n_chans = len(ch_names)
-    kind = 'custom EEG {}'.format(n_chans)
-    selection = np.arange(n_chans)
-    montage = mne.channels.Montage(ch_locs, ch_names, kind, selection)
-    # --------------------------------------------------------------------- #
-
     fwd = mne.read_forward_solution(args.forward.name, verbose='WARNING')
-    src = fwd['src']
     info = fwd['info']
     info['comps'] = []  # otherwise make_forward_solution complains
-    logging.info('Setting montage ...')
-    mne.channels.montage._set_montage(info, montage, update_ch_names=True)
+
+    if args.channels:
+        # --------------------- read channels locations --------------------- #
+        logging.info('Reading channels locations ...')
+        ch_names, ch_locs = parse_channels_file(args.channels.name,
+                                                args.padding)
+        n_chans = len(ch_names)
+        kind = 'custom EEG {}'.format(n_chans)
+        selection = np.arange(n_chans)
+        montage = mne.channels.Montage(ch_locs, ch_names, kind, selection)
+        # ------------------------------------------------------------------- #
+        logging.info('Setting montage ...')
+        mne.channels.montage._set_montage(info, montage, update_ch_names=True)
 
     # conductivity = (0.3, 0.006, 0.3)  # for three layers
     subjects_dir = args.subjects_dir
     logging.info('SUBJECTS_DIR is set to {}'.format(subjects_dir))
+    if args.spacing:
+        logging.info('Spacing is set to {}'.format(args.spacing))
+        logging.info('Setting up the source space ...')
+        src = mne.setup_source_space(args.subject_name, spacing=args.spacing,
+                                     subjects_dir=subjects_dir, add_dist=False,
+                                     verbose='ERROR')
+    else:
+        src = fwd['src']
+
     logging.info('Creating bem model (be patient) ...')
     model = mne.make_bem_model(subject=args.subject_name, ico=4,
                                # conductivity=conductivity,  # use default
                                subjects_dir=subjects_dir,
                                verbose='WARNING')
     bem = mne.make_bem_solution(model, verbose='WARNING')
-    trans_file = args.trans.name
-    n_jobs = args.jobs
+    if args.trans:
+        trans_file = args.trans.name
+    else:
+        trans_file = None
+    n_jobs = args.n_jobs
     logging.info('Computing forward solution (be patient) ...')
     fwd = mne.make_forward_solution(info, trans=trans_file, src=src,
-                                    bem=bem, meg=False, eeg=True,
+                                    bem=bem, meg=True, eeg=True,
                                     mindist=5.0, n_jobs=n_jobs,
                                     verbose='WARNING')
 
