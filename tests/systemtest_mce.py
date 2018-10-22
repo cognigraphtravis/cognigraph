@@ -1,17 +1,21 @@
 """Integration test to check mce performance"""
+import numpy as np
+np.warnings.filterwarnings('ignore')  # noqa
+import os
+os.environ['PYQTGRAPH_QT_LIB'] = 'PyQt5' # noqa
+
 import time
 import sys
 import os.path as op
 
 from PyQt5 import QtCore, QtGui
 
-import os
-os.environ['PYQTGRAPH_QT_LIB'] = 'PyQt5'
 from cognigraph.helpers.brainvision import read_fif_data
 from cognigraph.pipeline import Pipeline
 from cognigraph.nodes import sources, processors, outputs
 from cognigraph import TIME_AXIS
 from cognigraph.gui.window import GUIWindow
+
 
 app = QtGui.QApplication(sys.argv)
 
@@ -100,7 +104,7 @@ class AsyncUpdater(QtCore.QRunnable):
 
     def run(self):
         self._stop_flag = False
-        
+
         while self._stop_flag == False:
             start = time.time()
             pipeline.update_all_nodes()
@@ -113,9 +117,11 @@ class AsyncUpdater(QtCore.QRunnable):
     def stop(self):
         self._stop_flag = True
 
+
 pool = QtCore.QThreadPool.globalInstance()
 updater = AsyncUpdater()
 is_paused = True
+
 
 def toggle_updater():
     global pool
@@ -129,10 +135,9 @@ def toggle_updater():
         is_paused = True
         updater.stop()
         pool.waitForDone()
-        
+
+
 window.run_button.clicked.connect(toggle_updater)
-import numpy as np
-np.warnings.filterwarnings('ignore')
 window.show()
 updater.stop()
 pool.waitForDone()
