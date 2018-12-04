@@ -17,5 +17,7 @@ install:
  - pip install nibabel
  - pip install tables
  - pip install sklearn
+ - pip install pandas
+ - pip install theano
 script:
   - pytest
