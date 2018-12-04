@@ -20,4 +20,4 @@ install:
  - pip install pandas
  - pip install theano
  script:
-  - python tests.py
+  - cognigraph/tests/backup_test_basic.py
