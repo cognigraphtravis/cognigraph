@@ -7,5 +7,6 @@ install:
  - pip install pylsl
  - pip install mne
  - pip install pyqt5
+ - pip install scipy
 script:
   - pytest
