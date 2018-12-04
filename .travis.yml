@@ -19,5 +19,4 @@ install:
  - pip install sklearn
  - pip install pandas
  - pip install theano
- script:
-  - cognigraph/tests/backup_test_basic.py
+ script: pytest
