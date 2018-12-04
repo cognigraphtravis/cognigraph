@@ -1,8 +1,11 @@
 language: python
 python:
   - "3.6"
+cache: pip
 install:
- - sudo apt-get update
- - sudo apt-get -y install python3-pyqt5
+ - pip install pygame
+ - pip install pylsl
+ - pip install mne
+ - pip install pyqt5
 script:
   - pytest
