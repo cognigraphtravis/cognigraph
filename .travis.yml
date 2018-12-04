@@ -8,6 +8,6 @@ install:
  - pip install mne
  - pip install pyqt5
  - pip install scipy
- - pip install pylab
+ - pip install matplotlib
 script:
   - pytest
