@@ -12,7 +12,6 @@ install:
  - pip install h5py
  - pip install sympy
  - pip install numpy
- - pip install logging
  - pip install typing
  - pip install platform
  - pip install time
