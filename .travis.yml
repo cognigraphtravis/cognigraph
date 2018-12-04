@@ -16,7 +16,6 @@ install:
  - pip install pyqtgraph
  - pip install nibabel
  - pip install tables
- - pip install math
  - pip install subprocess
  - pip install unittest
 script:
