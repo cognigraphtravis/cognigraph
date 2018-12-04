@@ -13,9 +13,7 @@ install:
  - pip install sympy
  - pip install numpy
  - pip install typing
- - pip install collections
  - pip install sys
- - pip install contexlib
  - pip install io
  - pip install pyqtgraph
  - pip install types
