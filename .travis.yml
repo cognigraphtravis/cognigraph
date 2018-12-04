@@ -9,5 +9,26 @@ install:
  - pip install pyqt5
  - pip install scipy
  - pip install matplotlib
+ - pip install h5py
+ - pip install sympy
+ - pip install numpy
+ - pip install logging
+ - pip install typing
+ - pip install platform
+ - pip install time
+ - pip install PIL 
+ - pip install collections
+ - pip install sys
+ - pip install contexlib
+ - pip install io
+ - pip install pyqtgraph
+ - pip install types
+ - pip install nibabel
+ - pip install tables
+ - pip install torch
+ - pip install math
+ - pip install os
+ - pip install subprocess
+ - pip install unittest
 script:
   - pytest
