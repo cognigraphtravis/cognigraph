@@ -16,6 +16,5 @@ install:
  - pip install pyqtgraph
  - pip install nibabel
  - pip install tables
- - pip install unittest
 script:
   - pytest
