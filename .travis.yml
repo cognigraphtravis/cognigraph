@@ -19,5 +19,5 @@ install:
  - pip install sklearn
  - pip install pandas
  - pip install theano
- script: 
-  -python pytest
+ script:
+  - python tests.py
