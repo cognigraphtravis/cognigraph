@@ -19,4 +19,5 @@ install:
  - pip install sklearn
  - pip install pandas
  - pip install theano
- script: python cognigraph/tests/load_data.py
+script:
+ - pytest
