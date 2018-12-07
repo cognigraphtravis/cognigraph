@@ -20,4 +20,4 @@ install:
  - pip install pandas
  - pip install theano
  script: 
-  pytest
+  -python pytest
